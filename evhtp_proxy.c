@@ -69,26 +69,22 @@ print_data(evhtp_request_t * req, evbuf_t * buf, void * arg) {
 	return EVHTP_RES_OK;
 }
 
-static evhtp_res print_headers(evhtp_request_t * backend_req, evhtp_headers_t * hdr, void * arg) {
+static evhtp_res print_headers(evhtp_request_t * backend_req, evhtp_headers_t * headers, void * arg) {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
-	evhtp_header_t *header = NULL;
+	evhtp_header_t *kv = NULL;
 
     printf("all headers ok\n");
-    evhtp_kv_t * kv;
 
-    //TAILQ_FOREACH(kv, hdr, next) {
-    //    printf("%*s:%s\n", kv->klen, kv->key, kv->val);
-    //}
-
-    evhtp_headers_add_headers(frontend_req->headers_out, hdr);
-
-	//// Content-Length will be auto set by libevhtp
-    //if((header = evhtp_kvs_find_kv(frontend_req->headers_out, "Transfer-Encoding"))) {
-	//    evhtp_header_rm_and_free(frontend_req->headers_out, header);
-    //}
-    if((header = evhtp_kvs_find_kv(frontend_req->headers_out, "Connection"))) {
-	    evhtp_header_rm_and_free(frontend_req->headers_out, header);
-    }
+	TAILQ_FOREACH(kv, headers, next) {
+		//printf("%*s:%s\n", kv->klen, kv->key, kv->val);
+		if (strcasecmp(kv->key, "Connection") == 0)	{
+			continue;
+		}
+		evhtp_kvs_add_kv(frontend_req->headers_out, evhtp_kv_new(kv->key,
+			kv->val,
+			kv->k_heaped,
+			kv->v_heaped));
+	}
 
 
     printf("backend http response.\n");
@@ -113,21 +109,25 @@ make_request(evbase_t         * evbase,
              void             * arg) {
     evhtp_connection_t * conn;
     evhtp_request_t    * request;
-	evhtp_header_t *header = NULL;
+	evhtp_header_t *kv = NULL;
     evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 
     conn         = evhtp_connection_new_dns(evbase, evdns, host, port);
     conn->thread = evthr;
     request      = evhtp_request_new(cb, arg);
 
-
-    evhtp_headers_add_headers(request->headers_out, headers);
-    if((header = evhtp_kvs_find_kv(request->headers_out, "Connection"))) {
-	    evhtp_header_rm_and_free(request->headers_out, header);
-    }
-    if((header = evhtp_kvs_find_kv(request->headers_out, "Proxy-Connection"))) {
-	    evhtp_header_rm_and_free(request->headers_out, header);
-    }
+	TAILQ_FOREACH(kv, headers, next) {
+		if (strcasecmp(kv->key, "Connection") == 0)	{
+			continue;
+		}
+		if (strcasecmp(kv->key, "Proxy-Connection") == 0)	{
+			continue;
+		}
+		evhtp_kvs_add_kv(request->headers_out, evhtp_kv_new(kv->key,
+			kv->val,
+			kv->k_heaped,
+			kv->v_heaped));
+	}
     //if((header = evhtp_kvs_find_kv(request->headers_out, "Accept-Encoding"))) {
 	//    evhtp_header_rm_and_free(request->headers_out, header);
     //}

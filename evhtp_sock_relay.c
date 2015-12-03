@@ -25,10 +25,6 @@
 #include <event2/listener.h>
 #include <event2/util.h>
 
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/rand.h>
-
 static struct sockaddr_storage listen_on_addr;
 static struct sockaddr_storage connect_to_addr;
 static int connect_to_addrlen;
