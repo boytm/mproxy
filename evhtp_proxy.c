@@ -113,7 +113,9 @@ make_request(evbase_t         * evbase,
     evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 
     conn         = evhtp_connection_new_dns(evbase, evdns, host, port);
+#ifndef EVHTP_DISABLE_EVTHR
     conn->thread = evthr;
+#endif
     request      = evhtp_request_new(cb, arg);
 
 	TAILQ_FOREACH(kv, headers, next) {
@@ -206,7 +208,11 @@ frontend_cb(evhtp_request_t * req, void * arg) {
 
 	    make_request(evbase,
 			    evdns,
+#ifndef EVHTP_DISABLE_EVTHR
 			    req->conn->thread,
+#else
+				NULL,
+#endif
 			    //"127.0.0.1", 80,
 			    host, port,
 			    (char*)evbuffer_pullup(uri, -1),
@@ -245,6 +251,18 @@ main(int argc, char ** argv) {
     evbase_t    * evbase  = event_base_new();
     evhtp_t     * evhtp   = evhtp_new(evbase, NULL);
 
+#ifdef WIN32
+	WORD wVersionRequested;
+	WSADATA wsaData;
+	int err;
+
+	/* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
+	wVersionRequested = MAKEWORD(2, 2);
+
+	err = WSAStartup(wVersionRequested, &wsaData);
+#endif
+
+
 #ifdef USE_THREAD
     evhtp_set_gencb(evhtp, frontend_cb, NULL);
 
@@ -262,6 +280,7 @@ main(int argc, char ** argv) {
     evhtp_use_threads(evhtp, init_thread_cb, 2, NULL);
 #else
     evdns = evdns_base_new(evbase, 1);
+	evdns_base_set_option(evdns, "randomize-case:", "0");
     evhtp_set_gencb(evhtp, frontend_cb, NULL);
 #endif
 
