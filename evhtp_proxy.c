@@ -12,6 +12,7 @@
 #define MAX_OUTPUT (512*1024)
 
 void relay(struct bufferevent *b_in, struct evdns_base *evdns_base, const char *hostname, int port);
+static void	backend_cb(evhtp_request_t * backend_req, void * arg);
 
 #ifdef USE_THREAD
 static struct evdns_base  * evdnss[128] = {};
@@ -20,9 +21,24 @@ static struct evdns_base* evdns = NULL;
 #endif
 
 static void 
-print_backend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) {
+print_backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
-	printf("evhtp backend error\n");
+	evhtp_request_t * backend_req = req;
+	printf("evhtp backend connect error\n");
+
+	evhtp_send_reply(frontend_req, 502); // return 502 bad gateway, when connect fail
+	evhtp_request_resume(frontend_req);
+
+	evhtp_unset_hook(&frontend_req->hooks, evhtp_hook_on_error);
+}
+
+static void 
+print_backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) {
+	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
+	evhtp_request_t * backend_req = req;
+	printf("evhtp backend transport error\n");
+
+	backend_cb(backend_req, frontend_req); // finish transport
 }
 
 static void 
@@ -30,7 +46,9 @@ print_frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * ar
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
 	printf("evhtp frontend error\n");
 
+	// cancel request
 	evhtp_request_pause(backend_req);
+	evhtp_unset_hook(&backend_req->hooks, evhtp_hook_on_error);
 	evhtp_connection_t *ev_conn = evhtp_request_get_connection(backend_req);
 	evhtp_connection_free(ev_conn);
 }
@@ -59,12 +77,12 @@ print_data(evhtp_request_t * req, evbuf_t * buf, void * arg) {
 	
 	evbuffer_drain(buf, -1); // remove readed data
 
-	if(evbuffer_get_length(bufferevent_get_output(evhtp_request_get_bev(frontend_req))) > MAX_OUTPUT) {
-		printf("too many data, stop backend request\n");
-		evhtp_request_pause(req);
-
-		evhtp_set_hook(&evhtp_request_get_connection(frontend_req)->hooks, evhtp_hook_on_write, resume_backend_request, req);
-	}
+// 	if(evbuffer_get_length(bufferevent_get_output(evhtp_request_get_bev(frontend_req))) > MAX_OUTPUT) {
+// 		printf("too many data, stop backend request\n");
+// 		evhtp_request_pause(req);
+// 
+// 		evhtp_set_hook(&evhtp_request_get_connection(frontend_req)->hooks, evhtp_hook_on_write, resume_backend_request, req);
+// 	}
 
 	return EVHTP_RES_OK;
 }
@@ -91,6 +109,8 @@ static evhtp_res print_headers(evhtp_request_t * backend_req, evhtp_headers_t * 
     //evhtp_send_reply(frontend_req, EVHTP_RES_OK);
     evhtp_send_reply_chunk_start(frontend_req, evhtp_request_status(backend_req));
     evhtp_request_resume(frontend_req);
+
+	evhtp_set_hook(&backend_req->hooks, evhtp_hook_on_error, print_backend_trans_error, frontend_req);
 
     return EVHTP_RES_OK;
 }
@@ -140,7 +160,7 @@ make_request(evbase_t         * evbase,
     evbuffer_prepend_buffer(request->buffer_out, body);
 
 	// hook
-    evhtp_set_hook(&request->hooks, evhtp_hook_on_error, print_backend_error, arg);
+    evhtp_set_hook(&request->hooks, evhtp_hook_on_error, print_backend_conn_error, arg);
     evhtp_set_hook(&request->hooks, evhtp_hook_on_headers, print_headers, arg);
     evhtp_set_hook(&request->hooks, evhtp_hook_on_read, print_data, arg);
 
@@ -162,6 +182,7 @@ backend_cb(evhtp_request_t * backend_req, void * arg) {
     evhtp_send_reply_chunk_end(frontend_req);
 
     evhtp_unset_hook(&frontend_req->hooks, evhtp_hook_on_error);
+	evhtp_unset_hook(&backend_req->hooks, evhtp_hook_on_error);
 }
 
 static void
@@ -242,6 +263,7 @@ init_thread_cb(evhtp_t * htp, evthr_t * thr, void * arg) {
     evthr_set_aux(thr, &aux);
     evbase_t     * evbase = evthr_get_base(thr);
     evdnss[aux] = evdns_base_new(evbase, 1);
+	evdns_base_set_option(evdnss[aux], "randomize-case:", "0");
 }
 #endif
 
