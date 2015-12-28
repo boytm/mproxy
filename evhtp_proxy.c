@@ -210,12 +210,6 @@ frontend_cb(evhtp_request_t * req, void * arg) {
     evhtp_request_pause(req);
 
     if (htp_method_CONNECT == req->method) {
-	    evhtp_headers_add_header(req->headers_out,
-			    evhtp_header_new("Connection", "Keep-Alive", 0, 0));
-	    evhtp_headers_add_header(req->headers_out,
-			    evhtp_header_new("Content-Length", "0", 0, 0));
-	    evhtp_send_reply(req, EVHTP_RES_OK);
-
 	    printf("relay http socket.\n");
 	    evbev_t * bev = evhtp_request_take_ownership(req);
 	    relay(bev, evdns, host, port);
