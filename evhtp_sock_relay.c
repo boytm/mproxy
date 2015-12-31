@@ -118,45 +118,26 @@ eventcb(struct bufferevent *bev, short what, void *ctx)
 		bufferevent_free(bev);
 	}
 	else if (what & BEV_EVENT_CONNECTED){
-		fprintf(stderr, "connected with sock %d\n", bufferevent_getfd(bev));
-		bufferevent_enable(bev, EV_READ|EV_WRITE);
-		bufferevent_enable(partner, EV_READ|EV_WRITE);
-
-		const char headers[] = 
-			"HTTP/1.1 200 OK\r\n"
-			"Connection: Keep-Alive\r\n"
-			"\r\n";
-		bufferevent_write(partner, headers, sizeof(headers) - 1); // without ending '\0'
+// 		fprintf(stderr, "connected with sock %d\n", bufferevent_getfd(bev));
+// 		bufferevent_enable(bev, EV_READ|EV_WRITE);
+// 		bufferevent_enable(partner, EV_READ|EV_WRITE);
+// 
+// 		const char headers[] = 
+// 			"HTTP/1.1 200 OK\r\n"
+// 			"Connection: Keep-Alive\r\n"
+// 			"\r\n";
+// 		bufferevent_write(partner, headers, sizeof(headers) - 1); // without ending '\0'
 	}
 }
 
 void
-relay(struct bufferevent *b_in, struct evdns_base *evdns_base, const char *hostname, int port)
+relay(struct bufferevent *b_in, struct bufferevent *b_out)
 {
-	struct bufferevent *b_out;// *b_in;
-	struct event_base *base = bufferevent_get_base(b_in);
-
-
-	b_out = bufferevent_socket_new(base, -1,
-			BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
-
-	assert(b_in && b_out);
-
-	if (bufferevent_socket_connect_hostname(b_out, evdns_base, PF_INET,
-				hostname, port)<0) {
-		perror("bufferevent_socket_connect");
-		bufferevent_free(b_out);
-		bufferevent_free(b_in);
-		return;
-	}
-
-
 	bufferevent_setcb(b_in, readcb, NULL, eventcb, b_out);
 	bufferevent_setcb(b_out, readcb, NULL, eventcb, b_in);
 
-	//bufferevent_enable(b_in, EV_READ|EV_WRITE);
-	//bufferevent_enable(b_out, EV_READ|EV_WRITE);
-	//bufferevent_enable(b_out, EV_WRITE);
+	bufferevent_enable(b_in, EV_READ|EV_WRITE);
+	bufferevent_enable(b_out, EV_READ|EV_WRITE);
 }
 
 

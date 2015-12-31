@@ -5,23 +5,31 @@
 #include <stdint.h>
 #include <errno.h>
 #include <signal.h>
+#include <getopt.h>
 #include "evhtp.h"
 #include <event2/dns.h>
 
 
 #define MAX_OUTPUT (512*1024)
 
-void relay(struct bufferevent *b_in, struct evdns_base *evdns_base, const char *hostname, int port);
+typedef void (*connect_callback)(struct bufferevent *bev, void *arg);
+void connect_socks5(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg);
+void relay(struct bufferevent *b_in, struct bufferevent *b_out);
+
 static void	backend_cb(evhtp_request_t * backend_req, void * arg);
+static void connect_cb(struct bufferevent *bev, void *arg);
 
 #ifdef USE_THREAD
 static struct evdns_base  * evdnss[128] = {};
 #else
 static struct evdns_base* evdns = NULL;
 #endif
+const char *g_socks_server = NULL;
+int g_socks_port = 1080;
 
 static void 
-print_backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) {
+print_backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
+{
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_request_t * backend_req = req;
 	printf("evhtp backend connect error\n");
@@ -33,7 +41,8 @@ print_backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void 
 }
 
 static void 
-print_backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) {
+print_backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
+{
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_request_t * backend_req = req;
 	printf("evhtp backend transport error\n");
@@ -42,7 +51,8 @@ print_backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void
 }
 
 static void 
-print_frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) {
+print_frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
+{
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
 	printf("evhtp frontend error\n");
 
@@ -53,7 +63,8 @@ print_frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * ar
 	evhtp_connection_free(ev_conn);
 }
 
-static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg) {
+static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg) 
+{
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
 
 	printf("resume backend request\n");
@@ -66,7 +77,8 @@ static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg) {
 
 
 static evhtp_res
-print_data(evhtp_request_t * req, evbuf_t * buf, void * arg) {
+print_data(evhtp_request_t * req, evbuf_t * buf, void * arg) 
+{
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	size_t len = evbuffer_get_length(buf);
 
@@ -87,7 +99,8 @@ print_data(evhtp_request_t * req, evbuf_t * buf, void * arg) {
 	return EVHTP_RES_OK;
 }
 
-static evhtp_res print_headers(evhtp_request_t * backend_req, evhtp_headers_t * headers, void * arg) {
+static evhtp_res print_headers(evhtp_request_t * backend_req, evhtp_headers_t * headers, void * arg)
+{
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_header_t *kv = NULL;
 
@@ -116,23 +129,21 @@ static evhtp_res print_headers(evhtp_request_t * backend_req, evhtp_headers_t * 
 }
 
 int
-make_request(evbase_t         * evbase,
-	     struct evdns_base* evdns,
+make_request(struct bufferevent * bev,
              evthr_t          * evthr,
-             const char * const host,
-             const short        port,
              const char * const path,
-	     htp_method 	method,
+             htp_method 	method,
              evhtp_headers_t  * headers,
              evbuf_t    * 		body,
              evhtp_callback_cb  cb,
-             void             * arg) {
+             void             * arg) 
+{
     evhtp_connection_t * conn;
     evhtp_request_t    * request;
 	evhtp_header_t *kv = NULL;
     evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 
-    conn         = evhtp_connection_new_dns(evbase, evdns, host, port);
+    conn         = evhtp_connection_new_from_bev(bev);
 #ifndef EVHTP_DISABLE_EVTHR
     conn->thread = evthr;
 #endif
@@ -203,16 +214,37 @@ frontend_cb(evhtp_request_t * req, void * arg) {
 #endif
 
     const char *host = req->uri->authority->hostname; 
-    uint16_t port = req->uri->authority->port ?  req->uri->authority->port : 80;
+    uint16_t port = req->uri->authority->port ? req->uri->authority->port : 80;
     printf("Ok. %s:%u\n", host, port);
+
+	connect_socks5(evbase, evdns, host, port, connect_cb, req); // async connect
 
     /* Pause the frontend request while we run the backend requests. */
     evhtp_request_pause(req);
+}
+
+void connect_cb(struct bufferevent *bev, void *arg)
+{
+	evhtp_request_t * req = (evhtp_request_t *)arg;
+
+	if (NULL == bev)
+	{
+		evhtp_send_reply(req, 502); // return 502 bad gateway, when connect fail
+		evhtp_request_resume(req);
+		return;
+	}
 
     if (htp_method_CONNECT == req->method) {
 	    printf("relay http socket.\n");
-	    evbev_t * bev = evhtp_request_take_ownership(req);
-	    relay(bev, evdns, host, port);
+	    evbev_t * b_in = evhtp_request_take_ownership(req);
+
+		const char headers[] = 
+			"HTTP/1.1 200 OK\r\n"
+			"Connection: Keep-Alive\r\n"
+			"\r\n";
+		bufferevent_write(b_in, headers, sizeof(headers) - 1); // without ending '\0'
+
+	    relay(b_in, bev);
     } else {
 		evbuf_t *uri = evbuffer_new();
 		if (req->uri->query_raw) {
@@ -221,15 +253,12 @@ frontend_cb(evhtp_request_t * req, void * arg) {
 			evbuffer_add_reference(uri, req->uri->path->full, strlen(req->uri->path->full), NULL, NULL);
 		}
 
-	    make_request(evbase,
-			    evdns,
+	    make_request(bev,
 #ifndef EVHTP_DISABLE_EVTHR
 			    req->conn->thread,
 #else
 				NULL,
 #endif
-			    //"127.0.0.1", 80,
-			    host, port,
 			    (char*)evbuffer_pullup(uri, -1),
 			    req->method,
 			    req->headers_in, req->buffer_in, 
@@ -261,11 +290,24 @@ init_thread_cb(evhtp_t * htp, evthr_t * thr, void * arg) {
 }
 #endif
 
+void usage(const char *program)
+{
+	printf("\nUsage: %s [options]\n", program);
+	printf(
+		"  -l	proxy listen port\n"
+		"  -p	socks5 server port\n"
+		"  -s	socks5 server address\n"
+		"  -h	show help\n");
+
+}
+
 int
 main(int argc, char ** argv) {
     struct event *ev_sigterm;
-    evbase_t    * evbase  = event_base_new();
-    evhtp_t     * evhtp   = evhtp_new(evbase, NULL);
+    evbase_t    * evbase = NULL;
+    evhtp_t     * evhtp = NULL;
+	int			  port = 8081; // default listen port
+	int opt;
 
 #ifdef WIN32
 	WORD wVersionRequested;
@@ -278,6 +320,29 @@ main(int argc, char ** argv) {
 	err = WSAStartup(wVersionRequested, &wsaData);
 #endif
 
+	while ((opt = getopt(argc, argv, "hl:p:s:")) != -1) 
+	{
+		switch (opt) 
+		{
+		case 's':
+			g_socks_server = optarg;
+			break;
+		case 'p':
+			g_socks_port = atoi(optarg);
+			break;
+		case 'l':
+			port = atoi(optarg);
+			break;
+		case 'h':
+		default:
+			usage(argv[0]);
+			exit(EXIT_FAILURE);
+			break;
+		}
+	}
+
+	evbase  = event_base_new();
+	evhtp   = evhtp_new(evbase, NULL);
 
 #ifdef USE_THREAD
     evhtp_set_gencb(evhtp, frontend_cb, NULL);
@@ -304,7 +369,7 @@ main(int argc, char ** argv) {
     ev_sigterm = evsignal_new(evbase, SIGTERM, sigterm_cb, evbase);
     evsignal_add(ev_sigterm, NULL);
 #endif
-    evhtp_bind_socket(evhtp, "0.0.0.0", 8081, 1024);
+    evhtp_bind_socket(evhtp, "0.0.0.0", port, 1024);
     event_base_loop(evbase, 0);
 
     printf("Clean exit\n");
