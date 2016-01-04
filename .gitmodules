@@ -1,0 +1,3 @@
+[submodule "libevhtp"]
+	path = libevhtp
+	url = https://github.com/boytm/libevhtp

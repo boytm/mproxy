@@ -7,7 +7,7 @@ Based on a modified libevhtp library, the original version have some bugs when a
 # Installation #
 
 ### Install required development components
-libevent 2.0
+libevent 2.0 
 Win32 require MinGW and MSYS. 
 Linux require scons.
 
