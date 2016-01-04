@@ -27,8 +27,9 @@ static struct evdns_base* evdns = NULL;
 const char *g_socks_server = NULL;
 int g_socks_port = 1080;
 
+// error occur before read all headers 
 static void 
-print_backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
+backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_request_t * backend_req = req;
@@ -40,8 +41,9 @@ print_backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void 
 	evhtp_unset_hook(&frontend_req->hooks, evhtp_hook_on_error);
 }
 
+// error after read all headers 
 static void 
-print_backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
+backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_request_t * backend_req = req;
@@ -51,7 +53,7 @@ print_backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void
 }
 
 static void 
-print_frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
+frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
 {
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
 	printf("evhtp frontend error\n");
@@ -77,7 +79,7 @@ static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg)
 
 
 static evhtp_res
-print_data(evhtp_request_t * req, evbuf_t * buf, void * arg) 
+backend_body(evhtp_request_t * req, evbuf_t * buf, void * arg) 
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	size_t len = evbuffer_get_length(buf);
@@ -99,7 +101,7 @@ print_data(evhtp_request_t * req, evbuf_t * buf, void * arg)
 	return EVHTP_RES_OK;
 }
 
-static evhtp_res print_headers(evhtp_request_t * backend_req, evhtp_headers_t * headers, void * arg)
+static evhtp_res backend_headers(evhtp_request_t * backend_req, evhtp_headers_t * headers, void * arg)
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_header_t *kv = NULL;
@@ -119,11 +121,11 @@ static evhtp_res print_headers(evhtp_request_t * backend_req, evhtp_headers_t * 
 
 
     printf("backend http response.\n");
-    //evhtp_send_reply(frontend_req, EVHTP_RES_OK);
+
     evhtp_send_reply_chunk_start(frontend_req, evhtp_request_status(backend_req));
     evhtp_request_resume(frontend_req);
 
-	evhtp_set_hook(&backend_req->hooks, evhtp_hook_on_error, print_backend_trans_error, frontend_req);
+	evhtp_set_hook(&backend_req->hooks, evhtp_hook_on_error, backend_trans_error, frontend_req);
 
     return EVHTP_RES_OK;
 }
@@ -150,10 +152,10 @@ make_request(struct bufferevent * bev,
     request      = evhtp_request_new(cb, arg);
 
 	TAILQ_FOREACH(kv, headers, next) {
-		if (strcasecmp(kv->key, "Connection") == 0)	{
+		if (strcasecmp(kv->key, "Connection") == 0) {
 			continue;
 		}
-		if (strcasecmp(kv->key, "Proxy-Connection") == 0)	{
+		if (strcasecmp(kv->key, "Proxy-Connection") == 0) {
 			continue;
 		}
 		evhtp_kvs_add_kv(request->headers_out, evhtp_kv_new(kv->key,
@@ -171,11 +173,11 @@ make_request(struct bufferevent * bev,
     evbuffer_prepend_buffer(request->buffer_out, body);
 
 	// hook
-    evhtp_set_hook(&request->hooks, evhtp_hook_on_error, print_backend_conn_error, arg);
-    evhtp_set_hook(&request->hooks, evhtp_hook_on_headers, print_headers, arg);
-    evhtp_set_hook(&request->hooks, evhtp_hook_on_read, print_data, arg);
+    evhtp_set_hook(&request->hooks, evhtp_hook_on_error, backend_conn_error, arg);
+    evhtp_set_hook(&request->hooks, evhtp_hook_on_headers, backend_headers, arg);
+    evhtp_set_hook(&request->hooks, evhtp_hook_on_read, backend_body, arg);
 
-    evhtp_set_hook(&frontend_req->hooks, evhtp_hook_on_error, print_frontend_error, request);
+    evhtp_set_hook(&frontend_req->hooks, evhtp_hook_on_error, frontend_error, request);
 
     printf("Making backend request...\n");
     evhtp_make_request(conn, request, method, path);

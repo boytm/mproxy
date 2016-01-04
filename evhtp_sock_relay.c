@@ -118,15 +118,7 @@ eventcb(struct bufferevent *bev, short what, void *ctx)
 		bufferevent_free(bev);
 	}
 	else if (what & BEV_EVENT_CONNECTED){
-// 		fprintf(stderr, "connected with sock %d\n", bufferevent_getfd(bev));
-// 		bufferevent_enable(bev, EV_READ|EV_WRITE);
-// 		bufferevent_enable(partner, EV_READ|EV_WRITE);
-// 
-// 		const char headers[] = 
-// 			"HTTP/1.1 200 OK\r\n"
-// 			"Connection: Keep-Alive\r\n"
-// 			"\r\n";
-// 		bufferevent_write(partner, headers, sizeof(headers) - 1); // without ending '\0'
+
 	}
 }
 

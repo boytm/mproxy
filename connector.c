@@ -1,11 +1,13 @@
-#include <event2/buffer.h>
-#include <event2/bufferevent.h>
 #include <assert.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 
+#include <event2/buffer.h>
+#include <event2/bufferevent.h>
 #include <event2/dns.h>
 #include <event2/event.h>
-#include <stdio.h>
 
 
 extern const char *g_socks_server;
@@ -26,6 +28,7 @@ const char *socks5_strstatus[] = {
 };
 
 enum socks5_conn_status {
+	SCONN_TCP_INIT = 0,
 	SCONN_INIT = 100,
 	SCONN_AUTH_METHODS_SENT,
 	SCONN_REQUEST_SENT,
@@ -113,15 +116,20 @@ static void read_auth_methods(socks5_conn *conn)
 
 	evbuffer_copyout(buffer, data, 2);
 
-	if (data[0] != 0x05)
-	{
+	if (data[0] != 0x05) {
 		// ERROR protocol version
 		goto fail;
 	}
 	
-	if (data[1] != 0x00) // 0xff close socket
-	{
-		// non supported method
+	if (data[1] != 0x00) { 
+		/*
+		o  X'00' NO AUTHENTICATION REQUIRED
+		o  X'01' GSSAPI
+		o  X'02' USERNAME/PASSWORD
+		o  X'03' to X'7F' IANA ASSIGNED
+		o  X'80' to X'FE' RESERVED FOR PRIVATE METHODS
+		o  X'FF' NO ACCEPTABLE METHODS
+		*/
 		goto fail;
 	}
 
@@ -150,15 +158,24 @@ static void read_reply(socks5_conn *conn)
 		goto needmore;
 
 	evbuffer_copyout(buffer, data, 8);
-	if (data[0] != 0x05)
-	{
+	if (data[0] != 0x05) {
 		// ERROR protocol version
 		goto fail;
 	}
 
-	if (data[1] != 0x00) // fail
-	{
-		// non supported method
+	if (data[1] != 0x00) {
+		/*
+		o  X'00' succeeded
+		o  X'01' general SOCKS server failure
+		o  X'02' connection not allowed by ruleset
+		o  X'03' Network unreachable
+		o  X'04' Host unreachable
+		o  X'05' Connection refused
+		o  X'06' TTL expired
+		o  X'07' Command not supported
+		o  X'08' Address type not supported
+		o  X'09' to X'FF' unassigned
+		*/
 		goto fail;
 	}
 
@@ -169,14 +186,12 @@ static void read_reply(socks5_conn *conn)
 			goto needmore;
 
 		consume = 10;
-	}
-	else if (atype == SOCKS5_ATYPE_IPV6) {
+	} else if (atype == SOCKS5_ATYPE_IPV6) {
 		if (have < 22)
 			goto needmore;
 
 		consume = 22;
-	}
-	else if (atype == SOCKS5_ATYPE_DOMAIN) {
+	} else if (atype == SOCKS5_ATYPE_DOMAIN) {
 		unsigned char addrlen;
 
 		addrlen = data[4];
@@ -184,9 +199,7 @@ static void read_reply(socks5_conn *conn)
 			goto needmore;
 
 		consume = 7 + addrlen;
-	}
-	else
-	{
+	} else {
 		goto fail ; // Unknown address type
 	}
 
@@ -218,16 +231,13 @@ static void readcb(struct bufferevent *bev, void *ctx)
 		break;
 	}
 
-	if (conn->status == SCONN_CONNECT_TRANSMITTING)
-	{
+	if (conn->status == SCONN_CONNECT_TRANSMITTING)	{
 		bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
 
 		conn->cb(bev, conn->arg);
 
 		free(conn);
-	}
-	else if (conn->status == SCONN_ERROR)
-	{
+	} else if (conn->status == SCONN_ERROR)	{
 		// error
 		conn->cb(NULL, conn->arg);
 
@@ -237,8 +247,7 @@ static void readcb(struct bufferevent *bev, void *ctx)
 static void writecb(struct bufferevent *bev, void *ctx)
 {
 	socks5_conn *conn = (socks5_conn*)ctx;
-	if (conn->status == SCONN_INIT)
-	{
+	if (conn->status == SCONN_INIT)	{
 		send_auth_methods(conn);
 	}
 }
@@ -253,17 +262,13 @@ static void eventcb(struct bufferevent *bev, short what, void *ctx)
 		conn->cb(NULL, conn->arg);
 
 		free(conn);
-	}
-	else if (what & BEV_EVENT_CONNECTED){
+	} else if (what & BEV_EVENT_CONNECTED) {
 		fprintf(stderr, "connected with sock %d\n", bufferevent_getfd(bev));
 
-		if (conn->status == SCONN_INIT)
-		{
+		if (conn->status == SCONN_INIT)	{
 			/* socks5 */
-			writecb(bev, ctx);
-		}
-		else
-		{
+			send_auth_methods(conn);
+		} else {
 			/* TCP */
 			bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
 
@@ -274,27 +279,9 @@ static void eventcb(struct bufferevent *bev, short what, void *ctx)
 	}
 }
 
-void connect_cb(struct bufferevent *bev, void *arg)
-{
-	if (bev)
-	{
-		fprintf(stderr, "connect success\n");
-
-		const char headers[] = 
-			"GET / HTTP/1.1\r\n"
-			"Connection: Keep-Alive\r\n"
-			"\r\n";
-		bufferevent_write(bev, headers, sizeof(headers) - 1); // without ending '\0'
-	}
-	else
-	{
-		fprintf(stderr, "connect fail\n");
-	}
-}
-
 void connect_socks5(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg)
 {
-	struct bufferevent *bev;
+	struct bufferevent *bev = NULL;
 	socks5_conn *conn = (socks5_conn*)calloc(1, sizeof(socks5_conn));
 
 	strcpy(conn->host, hostname);
@@ -302,8 +289,7 @@ void connect_socks5(struct event_base *evbase, struct evdns_base *evdns_base, co
 	conn->cb = cb;
 	conn->arg = arg;
 
-	if (g_socks_server && g_socks_port != 0)
-	{
+	if (g_socks_server && g_socks_port != 0) {
 		hostname = g_socks_server;
 		port =g_socks_port;
 
@@ -311,25 +297,43 @@ void connect_socks5(struct event_base *evbase, struct evdns_base *evdns_base, co
 	}
 	
 	bev = bufferevent_socket_new(evbase, -1, BEV_OPT_CLOSE_ON_FREE/*|BEV_OPT_DEFER_CALLBACKS*/);
-	if (bev == NULL || bufferevent_socket_connect_hostname(bev, evdns_base, PF_UNSPEC, hostname, port) < 0) {
+	if (NULL == bev) {
+		goto fail;
+	}
+	if (bufferevent_socket_connect_hostname(bev, evdns_base, PF_UNSPEC, hostname, port) < 0) {
 		goto fail;
 	}
 
-	bufferevent_setcb(bev, readcb, writecb, eventcb, conn);
-	//bufferevent_enable(bev, EV_WRITE);
+	bufferevent_setcb(bev, readcb, NULL, eventcb, conn);
 
 	conn->client = bev;
 	return;
 
 fail:
 	perror("bufferevent_socket_connect");
-	bufferevent_free(bev);
+	if (bev)
+		bufferevent_free(bev);
 	cb(NULL, arg);
 	if (conn)
 		free(conn);
 }
 
 #if 0
+
+void connect_cb(struct bufferevent *bev, void *arg)
+{
+	if (bev) {
+		fprintf(stderr, "connect success\n");
+
+		const char headers[] = 
+			"GET / HTTP/1.1\r\n"
+			"Connection: Keep-Alive\r\n"
+			"\r\n";
+		bufferevent_write(bev, headers, sizeof(headers) - 1); // without ending '\0'
+	} else {
+		fprintf(stderr, "connect fail\n");
+	}
+}
 
 const char *g_socks_server = "127.0.0.1";
 int g_socks_port = 1080;
