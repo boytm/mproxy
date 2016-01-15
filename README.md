@@ -1,14 +1,18 @@
 # evhtp_proxy
-This is a SOCKS5 proxy to HTTP proxy converter. 3proxy can do the same thing, but his threaded model cannot scale well. 
+This is a SOCKS5 proxy to HTTP proxy converter. 3proxy can do the same thing, but his threaded model cannot scale well.
 Also this can worked as a simple HTTP proxy only.
 
 Based on a modified libevhtp library, the original version have some bugs when as HTTP client library.
+
+Why HTTP instead of SOCKS? Because some client only support HTTP proxy, for example IE9 only support SOCKS4.
 
 # Installation #
 
 ### Install required development components
 libevent 2.0 
+
 Win32 require MinGW and MSYS. 
+
 Linux require scons.
 
 ### Compile 

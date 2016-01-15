@@ -9,11 +9,10 @@
 #include "evhtp.h"
 #include <event2/dns.h>
 
+#include "connector.h"
 
 #define MAX_OUTPUT (512*1024)
 
-typedef void (*connect_callback)(struct bufferevent *bev, void *arg);
-void connect_socks5(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg);
 void relay(struct bufferevent *b_in, struct bufferevent *b_out);
 
 static void	backend_cb(evhtp_request_t * backend_req, void * arg);
@@ -26,6 +25,23 @@ static struct evdns_base* evdns = NULL;
 #endif
 const char *g_socks_server = NULL;
 int g_socks_port = 1080;
+int use_syslog = 0;
+
+enum upstream_mode {
+	UPSTREAM_TCP,
+	UPSTREAM_SOCKS5,
+	UPSTREAM_SS,
+};
+enum upstream_mode g_upstream_mode = UPSTREAM_TCP; // 0. TCP 1. SOCKS5 2. shadowsocks
+
+void connect_upstream(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg)
+{
+	if (g_upstream_mode == UPSTREAM_SS)	{
+		connect_ss(evbase, evdns_base, hostname, port, cb, arg);
+	} else {
+		connect_socks5(evbase, evdns_base, hostname, port, cb, arg);
+	}
+}
 
 // error occur before read all headers 
 static void 
@@ -219,7 +235,7 @@ frontend_cb(evhtp_request_t * req, void * arg) {
     uint16_t port = req->uri->authority->port ? req->uri->authority->port : 80;
     printf("Ok. %s:%u\n", host, port);
 
-	connect_socks5(evbase, evdns, host, port, connect_cb, req); // async connect
+	connect_upstream(evbase, evdns, host, port, connect_cb, req); // async connect
 
     /* Pause the frontend request while we run the backend requests. */
     evhtp_request_pause(req);
@@ -309,6 +325,9 @@ main(int argc, char ** argv) {
     evbase_t    * evbase = NULL;
     evhtp_t     * evhtp = NULL;
 	int			  port = 8081; // default listen port
+	const char *bind_address = "0.0.0.0";
+	const char *password = NULL;
+	const char *method = NULL;
 	int opt;
 
 #ifdef WIN32
@@ -322,7 +341,7 @@ main(int argc, char ** argv) {
 	err = WSAStartup(wVersionRequested, &wsaData);
 #endif
 
-	while ((opt = getopt(argc, argv, "hl:p:s:")) != -1) 
+	while ((opt = getopt(argc, argv, "hu:b:l:p:s:m:k:")) != -1) 
 	{
 		switch (opt) 
 		{
@@ -331,6 +350,15 @@ main(int argc, char ** argv) {
 			break;
 		case 'p':
 			g_socks_port = atoi(optarg);
+			break;
+		case 'm':
+			method = optarg;
+			break;
+		case 'k':
+			password = optarg;
+			break;
+		case 'b':
+			bind_address = optarg;
 			break;
 		case 'l':
 			port = atoi(optarg);
@@ -341,6 +369,14 @@ main(int argc, char ** argv) {
 			exit(EXIT_FAILURE);
 			break;
 		}
+	}
+
+	if (password && method)
+	{
+		g_upstream_mode = UPSTREAM_SS;
+		g_ss_method = enc_init(password, method);
+		g_ss_server = g_socks_server;
+		g_ss_port = g_socks_port;
 	}
 
 	evbase  = event_base_new();
@@ -371,8 +407,12 @@ main(int argc, char ** argv) {
     ev_sigterm = evsignal_new(evbase, SIGTERM, sigterm_cb, evbase);
     evsignal_add(ev_sigterm, NULL);
 #endif
-    evhtp_bind_socket(evhtp, "0.0.0.0", port, 1024);
-    event_base_loop(evbase, 0);
+    if (0 == evhtp_bind_socket(evhtp, bind_address, port, 1024)) {
+		event_base_loop(evbase, 0);
+	} else {
+		printf("Bind address failed\n");
+	}
+
 
     printf("Clean exit\n");
     return 0;

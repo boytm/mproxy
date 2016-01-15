@@ -9,11 +9,7 @@
 #include <event2/dns.h>
 #include <event2/event.h>
 
-
-extern const char *g_socks_server;
-extern int g_socks_port;
-
-typedef void (*connect_callback)(struct bufferevent *bev, void *arg);
+#include "connector.h"
 
 const char *socks5_strstatus[] = {
 	"ok",
