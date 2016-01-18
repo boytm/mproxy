@@ -1,3 +1,4 @@
+#ifdef ENABLE_SS
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -68,27 +69,40 @@ static enum bufferevent_filter_result input_filter(struct evbuffer *src, struct 
 	int i;
 	ss_conn *conn = (ss_conn*)ctx;
 
-	{
-		int iovec_len = evbuffer_peek(src, -1, NULL, NULL, 0);
+#define CRYPT(method, crypt_ctx, extra_len) \
+	do { \
+		int iovec_len = evbuffer_peek(src, -1, NULL, NULL, 0); \
+ \
+		struct evbuffer_iovec vec_src[iovec_len]; \
+		struct evbuffer_iovec vec_dst[1]; \
+ \
+		evbuffer_peek(src, -1, NULL, vec_src, iovec_len); \
+		if (1 != evbuffer_reserve_space(dst, evbuffer_get_length(src) + (extra_len), vec_dst, 1)) { \
+			/* malloc space failed */ \
+			return BEV_ERROR; \
+		} \
+		vec_dst[0].iov_len = 0; \
+ \
+		for (i = 0; i < iovec_len; i++)	{ \
+			ssize_t r = vec_src[i].iov_len; \
+			char *buf = ss_ ## method((char*)vec_dst[0].iov_base + vec_dst[0].iov_len, vec_src[i].iov_base, &r, &(crypt_ctx)); \
+			if (!buf) { \
+				/* crypt error */ \
+				LOGE( # method " failed"); \
+				return BEV_ERROR; \
+			} \
+ \
+			vec_dst[0].iov_len += r; \
+		} \
+ \
+		evbuffer_drain(src, -1); \
+		if (-1 == evbuffer_commit_space(dst, vec_dst, 1)) { \
+			LOGE("evbuffer commit space failed"); \
+			return BEV_ERROR; \
+		} \
+	} while(0)
 
-		struct evbuffer_iovec vec_out[iovec_len];
-
-		evbuffer_peek(src, -1, NULL, vec_out, iovec_len);
-
-		for (i = 0; i < iovec_len; i++)
-		{
-			ssize_t r = vec_out[i].iov_len;
-			char *buf = ss_decrypt(BUF_SIZE, vec_out[i].iov_base, &r, &conn->d_ctx);
-			if (!buf) {
-				// crypt error
-				return BEV_ERROR;
-			}
-
-			evbuffer_add_reference(dst,	buf, r, cleanupfn, NULL);
-		}
-
-		evbuffer_drain(src, -1);
-	}
+    CRYPT(decrypt, conn->d_ctx, BLOCK_SIZE);
 
 	return BEV_OK;
 }
@@ -98,27 +112,38 @@ static enum bufferevent_filter_result output_filter(struct evbuffer *src, struct
 	int i;
 	ss_conn *conn = (ss_conn*)ctx;
 
-	{
+	/*{
 		int iovec_len = evbuffer_peek(src, -1, NULL, NULL, 0);
 
-		struct evbuffer_iovec vec_out[iovec_len];
+		struct evbuffer_iovec vec_src[iovec_len];
+		struct evbuffer_iovec vec_dst[1];
 
-		evbuffer_peek(src, -1, NULL, vec_out, iovec_len);
+		evbuffer_peek(src, -1, NULL, vec_src, iovec_len);
+		if (1 != evbuffer_reserve_space(dst, evbuffer_get_length(src) + MAX_IV_LENGTH + BLOCK_SIZE, vec_dst, 1)) {
+			// malloc space failed
+			return BEV_ERROR;
+		}
+		vec_dst[0].iov_len = 0;
 
 		for (i = 0; i < iovec_len; i++)
 		{
-			ssize_t r = vec_out[i].iov_len;
-			char *buf = ss_encrypt(BUF_SIZE, vec_out[i].iov_base, &r, &conn->e_ctx);
+			ssize_t r = vec_src[i].iov_len;
+			char *buf = ss_encrypt((char*)vec_dst[0].iov_base + vec_dst[0].iov_len, vec_src[i].iov_base, &r, &conn->e_ctx);
 			if (!buf) {
 				// crypt error
+				LOGE("ss_encrypt failed");
 				return BEV_ERROR;
 			}
 
-			evbuffer_add_reference(dst,	buf, r, cleanupfn, NULL);
+			vec_dst[0].iov_len += r;
 		}
 
 		evbuffer_drain(src, -1);
-	}
+		if (-1 == evbuffer_commit_space(dst, vec_dst, 1)) {
+			return BEV_ERROR;
+		}
+	}*/
+    CRYPT(encrypt, conn->e_ctx, MAX_IV_LENGTH + BLOCK_SIZE);
 
 	return BEV_OK;
 }
@@ -127,14 +152,14 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
 {
 	ss_conn *conn = (ss_conn*)ctx;
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
-		fprintf(stderr, "sock %d error\n", bufferevent_getfd(bev));
+		LOGE("sock %d error", bufferevent_getfd(bev));
 
 		// error
 		conn->cb(NULL, conn->arg);
 
 		free_context(conn);
 	} else if (what & BEV_EVENT_CONNECTED) {
-		fprintf(stderr, "connected with sock %d\n", bufferevent_getfd(bev));
+		LOGD("connected with sock %d", bufferevent_getfd(bev));
 
 		/* TCP */
 		bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
@@ -167,7 +192,7 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
             evbuffer_defer_callbacks(bufferevent_get_output(bev), bufferevent_get_base(bev));
 			bufferevent_write(bev, data, 1 + 1 + domain_len + 2);
 		} else {
-			fprintf(stderr, "create filter event failed with sock %d\n", bufferevent_getfd(bev));
+			LOGE("create filter event failed");
 			free_context(conn);
 		}
 
@@ -206,7 +231,7 @@ void connect_ss(struct event_base *evbase, struct evdns_base *evdns_base, const 
 	return;
 
 fail:
-	perror("bufferevent_socket_connect");
+	LOGE("connect host %s:%d failed", hostname, port);
 	if (bev)
 		bufferevent_free(bev);
 	cb(NULL, arg);
@@ -214,4 +239,4 @@ fail:
 		free_context(conn);
 }
 
-
+#endif

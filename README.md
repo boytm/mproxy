@@ -1,50 +1,65 @@
-# evhtp_proxy
-This is a SOCKS5 proxy to HTTP proxy converter. 3proxy can do the same thing, but his threaded model cannot scale well.
-Also this can worked as a simple HTTP proxy only.
+# mproxy
+mproxy is a multi mode http proxy. 
+
+1. as a normal http proxy 
+
+2. as a SOCKS5 proxy to HTTP proxy converter 
+
+3. as a shadowsocks HTTP client 
+
+3proxy can work as mode 1 and mode 2, but his threaded model cannot scale well.
 
 Based on a modified libevhtp library, the original version have some bugs when as HTTP client library.
 
-Why HTTP instead of SOCKS? Because some client only support HTTP proxy, for example IE9 only support SOCKS4.
+Why HTTP proxy instead of SOCKSs proxy? Because some client only support HTTP proxy, for example IE9 only support SOCKS4.
 
 # Installation #
 
 ### Install required development components
-libevent 2.0 
+_libevent 2.12+ _,  _openssl_ (optional)
 
-Win32 require MinGW and MSYS. 
+Win32 require _MinGW_ and _MSYS_. 
 
-Linux require scons.
+Linux require _cmake_ or _scons_.
 
 ### Compile 
 #### Win32 MinGW
-make
+make -f Makefile.mingw
 #### Linux
-scons
+cmake . && make 
 
 # Usage #
 
     Mini HTTP proxy
     Usage:
-      evhtp_proxy [options]
+      mproxy [options]
     Options:
-      -l    proxy listen port
-      -p    socks5 server port
-      -s    socks5 server address
-      -h    show help
+      -l <local_port>       proxy listen port, default 8081
+      -b <local_address>    local address to bind, default 0.0.0.0
+      -p <server_port>      socks5/ss server port
+      -s <server_address>   socks5/ss server address
+      -m <encrypt_method>   encrypt method of remote ss server
+      -k <password>         password of remote ss server
+      -h                    show help
 
 
 ### Examples
 
-convert local machine's SOCKS5 to HTTP
+simple http proxy, listen 127.0.0.1:8081
 
-    ./evhtp_proxy -s 127.0.0.1 -p 1080
+    ./mproxy -b127.0.0.1
 
-simple http proxy
+convert local machine's SOCKS5 proxy at 127.0.0.1:1080 to HTTP proxy at 127.0.0.1:8087
 
-    ./evhtp_proxy
+    ./mproxy -b127.0.0.1 -l8087 -s 127.0.0.1 -p 1080
+
+worked as shadowsocks client, encrypt method aes-256-cfb, password mysspassword 
+
+    ./mproxy -b127.0.0.1 -l8087 -s 127.0.0.1 -p 1080 -k mysspassword -m aes-256-cfb
 
 
 ### TODO
 
 LRU based socket reuse
+
 

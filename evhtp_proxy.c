@@ -36,11 +36,15 @@ enum upstream_mode g_upstream_mode = UPSTREAM_TCP; // 0. TCP 1. SOCKS5 2. shadow
 
 void connect_upstream(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg)
 {
+#ifdef ENABLE_SS
 	if (g_upstream_mode == UPSTREAM_SS)	{
 		connect_ss(evbase, evdns_base, hostname, port, cb, arg);
 	} else {
+#endif
 		connect_socks5(evbase, evdns_base, hostname, port, cb, arg);
+#ifdef ENABLE_SS
 	}
+#endif
 }
 
 // error occur before read all headers 
@@ -49,7 +53,7 @@ backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_request_t * backend_req = req;
-	printf("evhtp backend connect error\n");
+	LOGE("evhtp backend connect error");
 
 	evhtp_send_reply(frontend_req, 502); // return 502 bad gateway, when connect fail
 	evhtp_request_resume(frontend_req);
@@ -63,7 +67,7 @@ backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_request_t * backend_req = req;
-	printf("evhtp backend transport error\n");
+	LOGE("evhtp backend transport error");
 
 	backend_cb(backend_req, frontend_req); // finish transport
 }
@@ -72,7 +76,7 @@ static void
 frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
 {
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
-	printf("evhtp frontend error\n");
+	LOGE("evhtp frontend error");
 
 	// cancel request
 	evhtp_request_pause(backend_req);
@@ -85,7 +89,7 @@ static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg)
 {
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
 
-	printf("resume backend request\n");
+	LOGD("resume backend request");
 	evhtp_request_resume(backend_req); // bug, client can't evhtp_request_resume
 
 	evhtp_unset_hook(&conn->hooks, evhtp_hook_on_write);
@@ -100,7 +104,7 @@ backend_body(evhtp_request_t * req, evbuf_t * buf, void * arg)
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	size_t len = evbuffer_get_length(buf);
 
-	printf("relay http body, got %zu bytes\n", len);
+	LOGD("relay http body, got %zu bytes", len);
 	//fwrite(evbuffer_pullup(buf, len), 1, len, stdout);
 
 	evhtp_send_reply_chunk(frontend_req, buf);
@@ -122,7 +126,7 @@ static evhtp_res backend_headers(evhtp_request_t * backend_req, evhtp_headers_t 
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_header_t *kv = NULL;
 
-    printf("all headers ok\n");
+    LOGD("all headers ok");
 
 	TAILQ_FOREACH(kv, headers, next) {
 		//printf("%*s:%s\n", kv->klen, kv->key, kv->val);
@@ -136,7 +140,7 @@ static evhtp_res backend_headers(evhtp_request_t * backend_req, evhtp_headers_t 
 	}
 
 
-    printf("backend http response.\n");
+    LOGD("backend http response.");
 
     evhtp_send_reply_chunk_start(frontend_req, evhtp_request_status(backend_req));
     evhtp_request_resume(frontend_req);
@@ -195,9 +199,8 @@ make_request(struct bufferevent * bev,
 
     evhtp_set_hook(&frontend_req->hooks, evhtp_hook_on_error, frontend_error, request);
 
-    printf("Making backend request...\n");
+    LOGD("Making backend request...");
     evhtp_make_request(conn, request, method, path);
-    printf("async.\n");
 
     return 0;
 }
@@ -207,7 +210,7 @@ backend_cb(evhtp_request_t * backend_req, void * arg) {
 	//evhtp_header_t *header = NULL;
     evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 
-    printf("finish http response.\n");
+    LOGD("finish http response.");
     evhtp_send_reply_chunk_end(frontend_req);
 
     evhtp_unset_hook(&frontend_req->hooks, evhtp_hook_on_error);
@@ -224,7 +227,7 @@ frontend_cb(evhtp_request_t * req, void * arg) {
     aux = (int *)evthr_get_aux(req->conn->thread);
     thr = *aux;
 
-    printf("  Received frontend request on thread %d... ", thr);
+    LOGD("  Received frontend request on thread %d... ", thr);
 	evdns = evdnss[thr];
     evbase_t    * evbase  = evthr_get_base(req->conn->thread);
 #else
@@ -233,7 +236,7 @@ frontend_cb(evhtp_request_t * req, void * arg) {
 
     const char *host = req->uri->authority->hostname; 
     uint16_t port = req->uri->authority->port ? req->uri->authority->port : 80;
-    printf("Ok. %s:%u\n", host, port);
+    LOGD("http request for %s:%u", host, port);
 
 	connect_upstream(evbase, evdns, host, port, connect_cb, req); // async connect
 
@@ -253,7 +256,7 @@ void connect_cb(struct bufferevent *bev, void *arg)
 	}
 
     if (htp_method_CONNECT == req->method) {
-	    printf("relay http socket.\n");
+	    LOGD("relay http socket.");
 	    evbev_t * b_in = evhtp_request_take_ownership(req);
 
 		const char headers[] = 
@@ -300,7 +303,7 @@ void
 init_thread_cb(evhtp_t * htp, evthr_t * thr, void * arg) {
     static int aux = 0;
 
-    printf("Spinning up a thread: %d\n", ++aux);
+    LOGD("Spinning up a thread: %d", ++aux);
     evthr_set_aux(thr, &aux);
     evbase_t     * evbase = evthr_get_base(thr);
     evdnss[aux] = evdns_base_new(evbase, 1);
@@ -312,10 +315,13 @@ void usage(const char *program)
 {
 	printf("\nUsage: %s [options]\n", program);
 	printf(
-		"  -l	proxy listen port\n"
-		"  -p	socks5 server port\n"
-		"  -s	socks5 server address\n"
-		"  -h	show help\n");
+        "  -l <local_port>       proxy listen port, default 8081\n"
+        "  -b <local_address>    local address to bind, default 0.0.0.0\n"
+        "  -p <server_port>      socks5/ss server port\n"
+        "  -s <server_address>   socks5/ss server address\n"
+        "  -m <encrypt_method>   encrypt method of remote ss server\n"
+        "  -k <password>         password of remote ss server\n"
+        "  -h                    show help\n");
 
 }
 
@@ -371,6 +377,7 @@ main(int argc, char ** argv) {
 		}
 	}
 
+#ifdef ENABLE_SS
 	if (password && method)
 	{
 		g_upstream_mode = UPSTREAM_SS;
@@ -378,6 +385,7 @@ main(int argc, char ** argv) {
 		g_ss_server = g_socks_server;
 		g_ss_port = g_socks_port;
 	}
+#endif
 
 	evbase  = event_base_new();
 	evhtp   = evhtp_new(evbase, NULL);
@@ -410,11 +418,11 @@ main(int argc, char ** argv) {
     if (0 == evhtp_bind_socket(evhtp, bind_address, port, 1024)) {
 		event_base_loop(evbase, 0);
 	} else {
-		printf("Bind address failed\n");
+		LOGE("Bind address %s failed", bind_address);
 	}
 
 
-    printf("Clean exit\n");
+    LOGD("Clean exit");
     return 0;
 }
 

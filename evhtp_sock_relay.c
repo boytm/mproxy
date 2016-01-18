@@ -25,9 +25,8 @@
 #include <event2/listener.h>
 #include <event2/util.h>
 
-static struct sockaddr_storage listen_on_addr;
-static struct sockaddr_storage connect_to_addr;
-static int connect_to_addrlen;
+#include "utils.h"
+
 
 #define MAX_OUTPUT (512*1024)
 
@@ -91,9 +90,8 @@ eventcb(struct bufferevent *bev, short what, void *ctx)
 
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
 		if (what & BEV_EVENT_ERROR) {
-			fprintf(stderr, "error with sock %d\n", bufferevent_getfd(bev));
-			if (errno)
-				perror("connection error");
+			LOGE("error with sock %d: %s\n", bufferevent_getfd(bev), 
+                    (errno ? strerror(errno) : ""));
 		}
 
 		if (partner) {

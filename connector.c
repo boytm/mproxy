@@ -252,14 +252,14 @@ static void eventcb(struct bufferevent *bev, short what, void *ctx)
 {
 	socks5_conn *conn = (socks5_conn*)ctx;
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
-		fprintf(stderr, "sock %d error\n", bufferevent_getfd(bev));
+		LOGE("sock %d error\n", bufferevent_getfd(bev));
 
 		// error
 		conn->cb(NULL, conn->arg);
 
 		free(conn);
 	} else if (what & BEV_EVENT_CONNECTED) {
-		fprintf(stderr, "connected with sock %d\n", bufferevent_getfd(bev));
+		LOGE("connected with sock %d\n", bufferevent_getfd(bev));
 
 		if (conn->status == SCONN_INIT)	{
 			/* socks5 */
@@ -294,9 +294,11 @@ void connect_socks5(struct event_base *evbase, struct evdns_base *evdns_base, co
 	
 	bev = bufferevent_socket_new(evbase, -1, BEV_OPT_CLOSE_ON_FREE/*|BEV_OPT_DEFER_CALLBACKS*/);
 	if (NULL == bev) {
+        LOGE("bufferevent create failed");
 		goto fail;
 	}
 	if (bufferevent_socket_connect_hostname(bev, evdns_base, PF_UNSPEC, hostname, port) < 0) {
+        LOGE("bufferevent connect %s:%d failed", hostname, port);
 		goto fail;
 	}
 
@@ -306,7 +308,6 @@ void connect_socks5(struct event_base *evbase, struct evdns_base *evdns_base, co
 	return;
 
 fail:
-	perror("bufferevent_socket_connect");
 	if (bev)
 		bufferevent_free(bev);
 	cb(NULL, arg);
