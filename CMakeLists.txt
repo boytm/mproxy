@@ -26,9 +26,9 @@ set(EVHTP_DISABLE_EVTHR ON)
 set(EVHTP_DISABLE_REGEX ON)
 add_subdirectory(libevhtp)
 
-include_directories(libevhtp)
+include_directories(libevhtp libevhtp/compat)
 
-set(MPROXY_SOURCES connector.c evhtp_proxy.c  evhtp_sock_relay.c)
+set(MPROXY_SOURCES connector.c evhtp_proxy.c  evhtp_sock_relay.c  lru.c )
 if (ENABLE_SS)
         add_definitions(-DENABLE_SS=1)
         set (MPROXY_SOURCES ${MPROXY_SOURCES} ss_connector.c encrypt.c )

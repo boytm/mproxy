@@ -62,7 +62,7 @@ static evhtp_res print_headers(evhtp_request_t * req, evhtp_headers_t * hdr, voi
 }
 
 static evhtp_res print_conn_error(evhtp_connection_t * connection, evhtp_error_flags errtype, void * arg) {
-    printf("conn error \n");
+    printf("connection hook error \n");
 
     return EVHTP_RES_OK;
 }

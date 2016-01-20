@@ -252,14 +252,14 @@ static void eventcb(struct bufferevent *bev, short what, void *ctx)
 {
 	socks5_conn *conn = (socks5_conn*)ctx;
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
-		LOGE("sock %d error\n", bufferevent_getfd(bev));
+		LOGE("sock %d error", bufferevent_getfd(bev));
 
 		// error
 		conn->cb(NULL, conn->arg);
 
 		free(conn);
 	} else if (what & BEV_EVENT_CONNECTED) {
-		LOGE("connected with sock %d\n", bufferevent_getfd(bev));
+		LOGD("connected with sock %d\n", bufferevent_getfd(bev));
 
 		if (conn->status == SCONN_INIT)	{
 			/* socks5 */

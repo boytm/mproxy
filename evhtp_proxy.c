@@ -17,11 +17,12 @@ void relay(struct bufferevent *b_in, struct bufferevent *b_out);
 
 static void	backend_cb(evhtp_request_t * backend_req, void * arg);
 static void connect_cb(struct bufferevent *bev, void *arg);
+static void lru_get_cb(evhtp_connection_t *conn, void *arg);
 
 #ifdef USE_THREAD
 static struct evdns_base  * evdnss[128] = {};
 #else
-static struct evdns_base* evdns = NULL;
+struct evdns_base* evdns = NULL;
 #endif
 const char *g_socks_server = NULL;
 int g_socks_port = 1080;
@@ -36,6 +37,11 @@ enum upstream_mode g_upstream_mode = UPSTREAM_TCP; // 0. TCP 1. SOCKS5 2. shadow
 
 void connect_upstream(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg)
 {
+	if (strlen(hostname) > 255) {
+		LOGE("domain too long");
+		return cb(NULL, arg);
+	}
+
 #ifdef ENABLE_SS
 	if (g_upstream_mode == UPSTREAM_SS)	{
 		connect_ss(evbase, evdns_base, hostname, port, cb, arg);
@@ -104,7 +110,7 @@ backend_body(evhtp_request_t * req, evbuf_t * buf, void * arg)
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	size_t len = evbuffer_get_length(buf);
 
-	LOGD("relay http body, got %zu bytes", len);
+	//LOGD("relay http body, got %u bytes", (unsigned)len);
 	//fwrite(evbuffer_pullup(buf, len), 1, len, stdout);
 
 	evhtp_send_reply_chunk(frontend_req, buf);
@@ -139,9 +145,6 @@ static evhtp_res backend_headers(evhtp_request_t * backend_req, evhtp_headers_t 
 			kv->v_heaped));
 	}
 
-
-    LOGD("backend http response.");
-
     evhtp_send_reply_chunk_start(frontend_req, evhtp_request_status(backend_req));
     evhtp_request_resume(frontend_req);
 
@@ -151,7 +154,7 @@ static evhtp_res backend_headers(evhtp_request_t * backend_req, evhtp_headers_t 
 }
 
 int
-make_request(struct bufferevent * bev,
+make_request(evhtp_connection_t * conn,
              evthr_t          * evthr,
              const char * const path,
              htp_method 	method,
@@ -160,12 +163,10 @@ make_request(struct bufferevent * bev,
              evhtp_callback_cb  cb,
              void             * arg) 
 {
-    evhtp_connection_t * conn;
     evhtp_request_t    * request;
 	evhtp_header_t *kv = NULL;
     evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 
-    conn         = evhtp_connection_new_from_bev(bev);
 #ifndef EVHTP_DISABLE_EVTHR
     conn->thread = evthr;
 #endif
@@ -186,8 +187,8 @@ make_request(struct bufferevent * bev,
     //if((header = evhtp_kvs_find_kv(request->headers_out, "Accept-Encoding"))) {
 	//    evhtp_header_rm_and_free(request->headers_out, header);
     //}
-    evhtp_headers_add_header(request->headers_out,
-                             evhtp_header_new("Connection", "close", 0, 0));
+//     evhtp_headers_add_header(request->headers_out,
+//                              evhtp_header_new("Connection", "close", 0, 0));
 
 
     evbuffer_prepend_buffer(request->buffer_out, body);
@@ -215,6 +216,12 @@ backend_cb(evhtp_request_t * backend_req, void * arg) {
 
     evhtp_unset_hook(&frontend_req->hooks, evhtp_hook_on_error);
 	evhtp_unset_hook(&backend_req->hooks, evhtp_hook_on_error);
+
+	if (backend_req->keepalive) {
+		const char *host = frontend_req->uri->authority->hostname; 
+		uint16_t port = frontend_req->uri->authority->port ? frontend_req->uri->authority->port : 80;
+		lru_set(host, port, backend_req->conn);
+	}
 }
 
 static void
@@ -238,10 +245,14 @@ frontend_cb(evhtp_request_t * req, void * arg) {
     uint16_t port = req->uri->authority->port ? req->uri->authority->port : 80;
     LOGD("http request for %s:%u", host, port);
 
-	connect_upstream(evbase, evdns, host, port, connect_cb, req); // async connect
-
     /* Pause the frontend request while we run the backend requests. */
     evhtp_request_pause(req);
+
+	if (htp_method_CONNECT == req->method) {
+		connect_upstream(evbase, evdns, host, port, connect_cb, req); // async connect
+	} else {
+		lru_get(host, port, lru_get_cb, req);
+	}
 }
 
 void connect_cb(struct bufferevent *bev, void *arg)
@@ -255,7 +266,6 @@ void connect_cb(struct bufferevent *bev, void *arg)
 		return;
 	}
 
-    if (htp_method_CONNECT == req->method) {
 	    LOGD("relay http socket.");
 	    evbev_t * b_in = evhtp_request_take_ownership(req);
 
@@ -266,27 +276,39 @@ void connect_cb(struct bufferevent *bev, void *arg)
 		bufferevent_write(b_in, headers, sizeof(headers) - 1); // without ending '\0'
 
 	    relay(b_in, bev);
-    } else {
-		evbuf_t *uri = evbuffer_new();
-		if (req->uri->query_raw) {
-			evbuffer_add_printf(uri, "%s?%s", req->uri->path->full, req->uri->query_raw);
-		} else {
-			evbuffer_add_reference(uri, req->uri->path->full, strlen(req->uri->path->full), NULL, NULL);
-		}
+    
+}
 
-	    make_request(bev,
+void lru_get_cb(evhtp_connection_t *conn, void *arg)
+{
+	evhtp_request_t * req = (evhtp_request_t *)arg;
+
+	if (NULL == conn)
+	{
+		evhtp_send_reply(req, 502); // return 502 bad gateway, when connect fail
+		evhtp_request_resume(req);
+		return;
+	}
+
+	evbuf_t *uri = evbuffer_new();
+	if (req->uri->query_raw) {
+		evbuffer_add_printf(uri, "%s?%s", req->uri->path->full, req->uri->query_raw);
+	} else {
+		evbuffer_add_reference(uri, req->uri->path->full, strlen(req->uri->path->full), NULL, NULL);
+	}
+
+	make_request(conn,
 #ifndef EVHTP_DISABLE_EVTHR
-			    req->conn->thread,
+		req->conn->thread,
 #else
-				NULL,
+		NULL,
 #endif
-			    (char*)evbuffer_pullup(uri, -1),
-			    req->method,
-			    req->headers_in, req->buffer_in, 
-				backend_cb, req);
+		(char*)evbuffer_pullup(uri, -1),
+		req->method,
+		req->headers_in, req->buffer_in, 
+		backend_cb, req);
 
-		evbuffer_free(uri);
-    }
+	evbuffer_free(uri);
 }
 
 /* Terminate gracefully on SIGTERM */
@@ -410,6 +432,8 @@ main(int argc, char ** argv) {
 	evdns_base_set_option(evdns, "randomize-case:", "0");
     evhtp_set_gencb(evhtp, frontend_cb, NULL);
 #endif
+
+	lru_init(evbase);
 
 #ifndef WIN32
     ev_sigterm = evsignal_new(evbase, SIGTERM, sigterm_cb, evbase);

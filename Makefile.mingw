@@ -15,7 +15,7 @@ CFLAGS:= -Wall -g -O0 -static -DNO_SYS_UN=1 -DENABLE_SS=1 \
 	$(addprefix -isystem , $(SYSINC)) \
 	$(addprefix -L , $(SYSLIB)) 
 
-sources:= evhtp_proxy.c evhtp_sock_relay.c connector.c \
+sources:= evhtp_proxy.c evhtp_sock_relay.c connector.c lru.c\
 	ss_connector.c encrypt.c \
 	libevhtp/evhtp.c libevhtp/htparse.c libevhtp/evhtp_numtoa.c 
 objects:= $(sources:.c=.o)

@@ -60,6 +60,6 @@ worked as shadowsocks client, encrypt method aes-256-cfb, password mysspassword
 
 ### TODO
 
-LRU based socket reuse
+use splice to speed up HTTP CONNECT socket relay under mode 1,2
 
 
