@@ -773,9 +773,10 @@ char * ss_encrypt(char *ciphertext, char *plaintext, ssize_t *len,
         //free(plaintext);
         return ciphertext;
     } else {
-        char *begin = plaintext;
-        while (plaintext < begin + *len) {
-            *plaintext = (char)enc_table[(uint8_t)*plaintext];
+        char *begin = ciphertext;
+        while (ciphertext < begin + *len) {
+            *ciphertext = (char)enc_table[(uint8_t)*plaintext];
+            ciphertext++;
             plaintext++;
         }
         return begin;
@@ -862,9 +863,10 @@ char * ss_decrypt(char *plaintext, char *ciphertext, ssize_t *len,
         //free(ciphertext);
         return plaintext;
     } else {
-        char *begin = ciphertext;
-        while (ciphertext < begin + *len) {
-            *ciphertext = (char)dec_table[(uint8_t)*ciphertext];
+        char *begin = plaintext;
+        while (plaintext < begin + *len) {
+            *plaintext = (char)dec_table[(uint8_t)*ciphertext];
+            plaintext++;
             ciphertext++;
         }
         return begin;
