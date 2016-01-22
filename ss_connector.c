@@ -159,7 +159,7 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
 
 		free_context(conn);
 	} else if (what & BEV_EVENT_CONNECTED) {
-		LOGD("connected with sock %d", bufferevent_getfd(bev));
+		LOGD("upstrem connected with sock %d", bufferevent_getfd(bev));
 
 		/* TCP */
 		bufferevent_setcb(bev, NULL, NULL, NULL, NULL);

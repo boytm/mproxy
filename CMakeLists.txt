@@ -7,9 +7,13 @@ set(MPROXY_PATCH_VERSION 11)
 
 set(CMAKE_VERBOSE_MAKEFILE on)
 
-#set(CMAKE_BUILD_TYPE Debug)
 #set(CMAKE_C_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -g -O0")
 #set(CMAKE_C_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -O2")
+if( NOT CMAKE_BUILD_TYPE )
+  set( CMAKE_BUILD_TYPE Debug CACHE STRING
+       "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
+       FORCE )
+endif()
 
 # -DENABLE_SS:STRING=ON
 OPTION(ENABLE_SS "Enable shadowsocks protocol" ON)

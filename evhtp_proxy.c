@@ -19,6 +19,8 @@ static void	backend_cb(evhtp_request_t * backend_req, void * arg);
 static void connect_cb(struct bufferevent *bev, void *arg);
 static void lru_get_cb(evhtp_connection_t *conn, void *arg);
 
+static void response_proxy_pac_file(evhtp_request_t * frontend_req);
+
 #ifdef USE_THREAD
 static struct evdns_base  * evdnss[128] = {};
 #else
@@ -37,11 +39,6 @@ enum upstream_mode g_upstream_mode = UPSTREAM_TCP; // 0. TCP 1. SOCKS5 2. shadow
 
 void connect_upstream(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg)
 {
-	if (strlen(hostname) > 255) {
-		LOGE("domain too long");
-		return cb(NULL, arg);
-	}
-
 #ifdef ENABLE_SS
 	if (g_upstream_mode == UPSTREAM_SS)	{
 		connect_ss(evbase, evdns_base, hostname, port, cb, arg);
@@ -61,7 +58,7 @@ backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 	evhtp_request_t * backend_req = req;
 	LOGE("evhtp backend connect error");
 
-	evhtp_send_reply(frontend_req, 502); // return 502 bad gateway, when connect fail
+	evhtp_send_reply(frontend_req, EVHTP_RES_BADGATEWAY); // return 502 bad gateway, when connect fail
 	evhtp_request_resume(frontend_req);
 
 	evhtp_unset_hook(&frontend_req->hooks, evhtp_hook_on_error);
@@ -115,7 +112,7 @@ backend_body(evhtp_request_t * req, evbuf_t * buf, void * arg)
 
 	evhtp_send_reply_chunk(frontend_req, buf);
 	
-	evbuffer_drain(buf, -1); // remove readed data
+	//evbuffer_drain(buf, -1); // remove readed data
 
 // 	if(evbuffer_get_length(bufferevent_get_output(evhtp_request_get_bev(frontend_req))) > MAX_OUTPUT) {
 // 		printf("too many data, stop backend request\n");
@@ -245,6 +242,15 @@ frontend_cb(evhtp_request_t * req, void * arg) {
     uint16_t port = req->uri->authority->port ? req->uri->authority->port : 80;
     LOGD("http request for %s:%u", host, port);
 
+    if (host == NULL) {
+        // non proxy request, so return proxy.pac file
+        return response_proxy_pac_file(req);
+    }
+    if (strlen(host) > 255) {
+        LOGE("domain too long");
+        return evhtp_send_reply(req, EVHTP_RES_SERVERR);
+    }
+
     /* Pause the frontend request while we run the backend requests. */
     evhtp_request_pause(req);
 
@@ -261,22 +267,21 @@ void connect_cb(struct bufferevent *bev, void *arg)
 
 	if (NULL == bev)
 	{
-		evhtp_send_reply(req, 502); // return 502 bad gateway, when connect fail
+		evhtp_send_reply(req, EVHTP_RES_BADGATEWAY); // return 502 bad gateway, when connect fail
 		evhtp_request_resume(req);
 		return;
 	}
 
-	    LOGD("relay http socket.");
-	    evbev_t * b_in = evhtp_request_take_ownership(req);
+	LOGD("relay http socket.");
+	evbev_t * b_in = evhtp_request_take_ownership(req);
 
-		const char headers[] = 
-			"HTTP/1.1 200 OK\r\n"
-			"Connection: Keep-Alive\r\n"
-			"\r\n";
-		bufferevent_write(b_in, headers, sizeof(headers) - 1); // without ending '\0'
+	const char headers[] = 
+		"HTTP/1.1 200 OK\r\n"
+		"Connection: Keep-Alive\r\n"
+		"\r\n";
+	bufferevent_write(b_in, headers, sizeof(headers) - 1); // without ending '\0'
 
-	    relay(b_in, bev);
-    
+	relay(b_in, bev);
 }
 
 void lru_get_cb(evhtp_connection_t *conn, void *arg)
@@ -285,7 +290,7 @@ void lru_get_cb(evhtp_connection_t *conn, void *arg)
 
 	if (NULL == conn)
 	{
-		evhtp_send_reply(req, 502); // return 502 bad gateway, when connect fail
+		evhtp_send_reply(req, EVHTP_RES_BADGATEWAY); // return 502 bad gateway, when connect fail
 		evhtp_request_resume(req);
 		return;
 	}
@@ -309,6 +314,50 @@ void lru_get_cb(evhtp_connection_t *conn, void *arg)
 		backend_cb, req);
 
 	evbuffer_free(uri);
+}
+static const char *g_proxy_pac_path = NULL;
+static char *g_proxy_pac_content = NULL;
+static size_t g_proxy_pac_length = 0;
+
+void load_proxy_pac_file(const char *path)
+{
+    FILE *pac = fopen(path, "rb");
+    if (pac) {
+        fseek(pac, 0, SEEK_END);
+        g_proxy_pac_length = ftell(pac);
+        if (g_proxy_pac_length == 0)
+            goto fail;
+        fseek(pac, 0, SEEK_SET);
+        g_proxy_pac_content = (char *)malloc(g_proxy_pac_length);
+        if (g_proxy_pac_content == NULL)
+            goto fail;
+        fread(g_proxy_pac_content, 1, g_proxy_pac_length, pac);
+        fclose(pac);
+        return;
+    } else {
+        LOGE("open proxy pac file failed");
+    }
+
+fail:
+    g_proxy_pac_length = 0;
+    if (pac)
+        fclose(pac);
+}
+
+static void response_proxy_pac_file(evhtp_request_t * frontend_req)
+{
+    LOGD("response proxy.pac to client");
+    struct evbuffer *body = evbuffer_new();
+    if (body && g_proxy_pac_length) {
+        evbuffer_add_reference(body, g_proxy_pac_content, g_proxy_pac_length, NULL, NULL);
+
+        evbuffer_add_buffer(frontend_req->buffer_out, body);
+        evhtp_send_reply(frontend_req, EVHTP_RES_OK);
+
+        evbuffer_free(body);
+    } else {
+        evhtp_send_reply(frontend_req, EVHTP_RES_SERVERR); /* internal server error */
+    }
 }
 
 /* Terminate gracefully on SIGTERM */
@@ -357,6 +406,12 @@ main(int argc, char ** argv) {
 	const char *password = NULL;
 	const char *method = NULL;
 	int opt;
+    int option_index = 0;
+    static struct option long_options[] = {
+        {"pac", 1, 0, 1000},
+        {"help", 0, 0, 'h'},
+        {0, 0, 0, 0}
+    };
 
 #ifdef WIN32
 	WORD wVersionRequested;
@@ -369,7 +424,9 @@ main(int argc, char ** argv) {
 	err = WSAStartup(wVersionRequested, &wsaData);
 #endif
 
-	while ((opt = getopt(argc, argv, "hu:b:l:p:s:m:k:")) != -1) 
+	while ((opt = getopt_long(argc, argv, "hu:b:l:p:s:m:k:",
+                    long_options, &option_index)
+                    ) != -1) 
 	{
 		switch (opt) 
 		{
@@ -391,6 +448,9 @@ main(int argc, char ** argv) {
 		case 'l':
 			port = atoi(optarg);
 			break;
+        case 1000:
+            g_proxy_pac_path = optarg;
+            break;
 		case 'h':
 		default:
 			usage(argv[0]);
@@ -406,6 +466,10 @@ main(int argc, char ** argv) {
 		g_ss_method = enc_init(password, method);
 		g_ss_server = g_socks_server;
 		g_ss_port = g_socks_port;
+
+        if (g_proxy_pac_path && g_proxy_pac_path[0]) {
+            load_proxy_pac_file(g_proxy_pac_path);
+        }
 	}
 #endif
 

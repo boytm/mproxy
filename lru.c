@@ -21,31 +21,31 @@
 
 static evhtp_res lru_conn_error(evhtp_connection_t *connection, evhtp_error_flags errtype, void *arg);
 
-struct TreeItem;
+struct tree_item;
 
-struct BevItem
+struct connection_item
 {
 	evhtp_connection_t *connection;
 	time_t last_use;
-	struct TreeItem *parent;
+	struct tree_item *parent;
 
-	TAILQ_ENTRY(BevItem) queue_field;
-	TAILQ_ENTRY(BevItem) tree_list_field;
+	TAILQ_ENTRY(connection_item) queue_field;
+	TAILQ_ENTRY(connection_item) tree_list_field;
 };
 
-struct TreeItem 
+struct tree_item 
 {
 	char hostname[256];
 	int port;
 
-	TAILQ_HEAD(bev, BevItem) free_list;
+	TAILQ_HEAD(bev, connection_item) free_list;
 
-	RB_ENTRY(TreeItem) field;
+	RB_ENTRY(tree_item) field;
 };
 
-static TAILQ_HEAD(queue, BevItem) queue = TAILQ_HEAD_INITIALIZER(queue);
+static TAILQ_HEAD(queue, connection_item) queue = TAILQ_HEAD_INITIALIZER(queue);
 
-static int TreeItemCompare(const struct TreeItem *lhs, const struct TreeItem *rhs)
+static int TreeItemCompare(const struct tree_item *lhs, const struct tree_item *rhs)
 {
 	if (lhs->port == rhs->port) {
 		return strcasecmp(lhs->hostname, rhs->hostname);
@@ -54,22 +54,22 @@ static int TreeItemCompare(const struct TreeItem *lhs, const struct TreeItem *rh
 	}
 }
 
-static RB_HEAD(lru, TreeItem) lru_head = RB_INITIALIZER(lru_head);
-RB_GENERATE(lru, TreeItem, field, TreeItemCompare);
+static RB_HEAD(lru, tree_item) lru_head = RB_INITIALIZER(lru_head);
+RB_GENERATE(lru, tree_item, field, TreeItemCompare);
 struct event *timer_ev;
 
 evhtp_connection_t * cache_get(const char *hostname, int port)
 {
 	evhtp_connection_t *retval = NULL;
-	struct TreeItem *ti = NULL;
+	struct tree_item *ti = NULL;
 
-	struct TreeItem item;
+	struct tree_item item;
 	strcpy(item.hostname, hostname);
 	item.port = port;
 
 	ti = RB_FIND(lru, &lru_head, &item);
 	if (ti) {
-		struct BevItem *bi = TAILQ_FIRST(&ti->free_list);
+		struct connection_item *bi = TAILQ_FIRST(&ti->free_list);
 		if (bi) {
 			assert(bi->parent == ti);
 			LOGD("LRU get connection %p %s:%d, last %d", bi->connection, hostname, (int)port, (int)bi->last_use);
@@ -94,14 +94,14 @@ evhtp_connection_t * cache_get(const char *hostname, int port)
 
 void cache_put(const char *hostname, int port, evhtp_connection_t *conn)
 {
-	struct TreeItem *ti;
-	struct TreeItem item;
+	struct tree_item *ti;
+	struct tree_item item;
 	strcpy(item.hostname, hostname);
 	item.port = port;
 
 	ti = RB_FIND(lru, &lru_head, &item);
 	if (ti == NULL) {
-		ti = (struct TreeItem *)calloc(1, sizeof(*ti));
+		ti = (struct tree_item *)calloc(1, sizeof(*ti));
 		assert(ti);
 		TAILQ_INIT(&ti->free_list);
 		strcpy(ti->hostname, hostname);
@@ -113,7 +113,7 @@ void cache_put(const char *hostname, int port, evhtp_connection_t *conn)
 	}
 
 	{
-		struct BevItem *bi = (struct BevItem *)calloc(1, sizeof(struct BevItem));
+		struct connection_item *bi = (struct connection_item *)calloc(1, sizeof(struct connection_item));
 		assert(bi);
 		bi->connection = conn;
 		bi->last_use = time(NULL);
@@ -138,14 +138,14 @@ void cache_put(const char *hostname, int port, evhtp_connection_t *conn)
 	(var) && ((tvar) = TAILQ_PREV((var), headname, field), 1);	\
 	(var) = (tvar))
 
-static void clear_item(struct BevItem *bi, int error)
+static void clear_item(struct connection_item *bi, int error)
 {
 	LOGD("LRU clear connection %p %s:%d, last %d", bi->connection, bi->parent->hostname, (int)bi->parent->port, (int)bi->last_use);
 	TAILQ_REMOVE(&bi->parent->free_list, bi, tree_list_field); // remove from tree free list
 
 	if (TAILQ_EMPTY(&bi->parent->free_list)) {
 		// empty tree item
-		struct TreeItem *ti;
+		struct tree_item *ti;
 		ti = RB_REMOVE(lru, &lru_head, bi->parent);
 		assert(ti && ti == bi->parent);
 		free(ti);
@@ -160,8 +160,8 @@ static void clear_item(struct BevItem *bi, int error)
 
 static void timercb(evutil_socket_t fd, short events, void *arg)
 {
-	struct BevItem *bi = NULL;
-	struct BevItem *temp;
+	struct connection_item *bi = NULL;
+	struct connection_item *temp;
 	time_t now = time(NULL);
 
 	TAILQ_FOREACH_REVERSE_SAFE(bi, &queue, queue, queue_field, temp) {
@@ -203,7 +203,7 @@ static void lru_connect_cb(struct bufferevent *bev, void *arg)
 
 static evhtp_res lru_conn_error(evhtp_connection_t * connection, evhtp_error_flags errtype, void * arg)
 {
-	struct BevItem *bi = (struct BevItem *)arg;
+	struct connection_item *bi = (struct connection_item *)arg;
 	assert (bi && bi->parent && bi->connection == connection);
 	LOGE("connection %p hook error %s:%d", connection, bi->parent->hostname, (int)bi->parent->port);
 	clear_item(bi, 1);
