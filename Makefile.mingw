@@ -1,21 +1,21 @@
 
 SHADOWSOCKS_DIR=/d/Sources/shadowsocks-libev
 OPENSSL_DIR=/d/openssl
-LIBEVENT_DIR=/d/Sources/libevent-2.0.22-stable
+LIBEVENT_DIR=/d/Sources/libevent-2.0.21-stable
 SYSINC:= $(LIBEVENT_DIR)/include/ \
 	$(LIBEVENT_DIR)/WIN32-Code/ \
 	$(OPENSSL_DIR)/include
 SYSLIB:= $(LIBEVENT_DIR)/.libs/ \
 	$(OPENSSL_DIR)/lib
 
-CFLAGS:= -Wall -g -O0 -static -DNO_SYS_UN=1 -DENABLE_SS=1 \
+CFLAGS:= -Wall -g -O2 -static -DNO_SYS_UN=1 -DENABLE_SS=1 \
 	-Ilibevhtp  -I libevhtp/compat/ \
 	-levent -lws2_32 \
 	-DUSE_CRYPTO_OPENSSL=1 -lcrypto \
 	$(addprefix -isystem , $(SYSINC)) \
 	$(addprefix -L , $(SYSLIB)) 
 
-sources:= evhtp_proxy.c evhtp_sock_relay.c connector.c lru.c\
+sources:= evhtp_proxy.c evhtp_sock_relay.c connector.c lru.c log.c \
 	ss_connector.c encrypt.c \
 	libevhtp/evhtp.c libevhtp/htparse.c libevhtp/evhtp_numtoa.c 
 objects:= $(sources:.c=.o)

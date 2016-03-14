@@ -27,7 +27,7 @@
 #include "config.h"
 #endif
 
-#ifndef __MINGW32__
+#ifndef _WIN32
 #include <sys/socket.h>
 #else
 
@@ -98,10 +98,10 @@ typedef struct {
 #endif
 } cipher_ctx_t;
 
-#ifdef HAVE_STDINT_H
 #include <stdint.h>
-#elif HAVE_INTTYPES_H
-#include <inttypes.h>
+
+#ifdef _MSC_VER
+#define ssize_t int
 #endif
 
 #define BLOCK_SIZE 32

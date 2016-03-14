@@ -100,7 +100,7 @@ static void send_request(socks5_conn *conn)
 
 static void read_auth_methods(socks5_conn *conn)
 {
-	char data[2] = {};
+	char data[2] = {0};
 	struct evbuffer *buffer;
 	size_t have;
 
@@ -143,7 +143,7 @@ needmore:
 
 static void read_reply(socks5_conn *conn)
 {
-	uint8_t data[7 + 255] = {};
+	uint8_t data[7 + 255] = {0};
 	struct evbuffer *buffer;
 	size_t have, consume = 0;
 
@@ -258,8 +258,9 @@ static void eventcb(struct bufferevent *bev, short what, void *ctx)
 		conn->cb(NULL, conn->arg);
 
 		free(conn);
+        bufferevent_free(bev);
 	} else if (what & BEV_EVENT_CONNECTED) {
-		LOGD("connected with sock %d\n", bufferevent_getfd(bev));
+		LOGD("connected with sock %d", bufferevent_getfd(bev));
 
 		if (conn->status == SCONN_INIT)	{
 			/* socks5 */
@@ -279,6 +280,9 @@ void connect_socks5(struct event_base *evbase, struct evdns_base *evdns_base, co
 {
 	struct bufferevent *bev = NULL;
 	socks5_conn *conn = (socks5_conn*)calloc(1, sizeof(socks5_conn));
+    if (NULL == conn) {
+        goto fail;
+    }
 
 	strcpy(conn->host, hostname);
 	conn->port = port;

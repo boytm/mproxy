@@ -5,9 +5,16 @@
 #include <stdint.h>
 #include <errno.h>
 #include <signal.h>
-#include <getopt.h>
-#include "evhtp.h"
+#ifdef _MSC_VER
+# ifndef NDEBUG
+#  include "vld.h"
+# endif
+# include "bsd_getopt.h"
+#else
+# include <getopt.h>
+#endif
 #include <event2/dns.h>
+#include "evhtp.h"
 
 #include "connector.h"
 
@@ -81,8 +88,11 @@ frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
 	LOGE("evhtp frontend error");
 
+    if (req->status = EVHTP_RES_PAUSE) {
+        evhtp_request_resume(req); // paused connection cannot be freed automatically by socket EOF|error
+    }
+
 	// cancel request
-	evhtp_request_pause(backend_req);
 	evhtp_unset_hook(&backend_req->hooks, evhtp_hook_on_error);
 	evhtp_connection_t *ev_conn = evhtp_request_get_connection(backend_req);
 	evhtp_connection_free(ev_conn);
@@ -132,10 +142,13 @@ static evhtp_res backend_headers(evhtp_request_t * backend_req, evhtp_headers_t 
     LOGD("all headers ok");
 
 	TAILQ_FOREACH(kv, headers, next) {
-		//printf("%*s:%s\n", kv->klen, kv->key, kv->val);
+		//printf("%*s:%*s\n", kv->klen, kv->key, kv->vlen, kv->val);
 		if (strcasecmp(kv->key, "Connection") == 0)	{
 			continue;
 		}
+        if (strcasecmp(kv->key, "Transfer-Encoding") == 0)	{
+            continue;
+        }
 		evhtp_kvs_add_kv(frontend_req->headers_out, evhtp_kv_new(kv->key,
 			kv->val,
 			kv->k_heaped,
@@ -218,6 +231,7 @@ backend_cb(evhtp_request_t * backend_req, void * arg) {
 		const char *host = frontend_req->uri->authority->hostname; 
 		uint16_t port = frontend_req->uri->authority->port ? frontend_req->uri->authority->port : 80;
 		lru_set(host, port, backend_req->conn);
+        evhtp_request_free(backend_req); // evhtp_make_request() does not free previous request
 	}
 }
 
@@ -274,6 +288,7 @@ void connect_cb(struct bufferevent *bev, void *arg)
 
 	LOGD("relay http socket.");
 	evbev_t * b_in = evhtp_request_take_ownership(req);
+    evhtp_connection_free(evhtp_request_get_connection(req));
 
 	const char headers[] = 
 		"HTTP/1.1 200 OK\r\n"
@@ -399,16 +414,19 @@ void usage(const char *program)
 int
 main(int argc, char ** argv) {
     struct event *ev_sigterm;
+    struct event *ev_sigint;
     evbase_t    * evbase = NULL;
     evhtp_t     * evhtp = NULL;
 	int			  port = 8081; // default listen port
 	const char *bind_address = "0.0.0.0";
 	const char *password = NULL;
 	const char *method = NULL;
+    const char *name_server = NULL;
 	int opt;
     int option_index = 0;
     static struct option long_options[] = {
         {"pac", 1, 0, 1000},
+        {"dns", 1, 0, 1001},
         {"help", 0, 0, 'h'},
         {0, 0, 0, 0}
     };
@@ -423,6 +441,8 @@ main(int argc, char ** argv) {
 
 	err = WSAStartup(wVersionRequested, &wsaData);
 #endif
+
+    log_init(NULL, LOG_LEVEL_DEBUG);
 
 	while ((opt = getopt_long(argc, argv, "hu:b:l:p:s:m:k:",
                     long_options, &option_index)
@@ -451,6 +471,9 @@ main(int argc, char ** argv) {
         case 1000:
             g_proxy_pac_path = optarg;
             break;
+        case 1001:
+            name_server = optarg;
+            break;
 		case 'h':
 		default:
 			usage(argv[0]);
@@ -478,22 +501,25 @@ main(int argc, char ** argv) {
 
 #ifdef USE_THREAD
     evhtp_set_gencb(evhtp, frontend_cb, NULL);
-
-#if 0
-#ifndef EVHTP_DISABLE_SSL
-    evhtp_ssl_cfg_t scfg1 = { 0 };
-
-    scfg1.pemfile  = "./server.pem";
-    scfg1.privfile = "./server.pem";
-
-    evhtp_ssl_init(evhtp, &scfg1);
-#endif
-#endif
-
     evhtp_use_threads(evhtp, init_thread_cb, 2, NULL);
 #else
-    evdns = evdns_base_new(evbase, 1);
-	evdns_base_set_option(evdns, "randomize-case:", "0");
+
+    if (name_server) {
+        evdns = evdns_base_new(evbase, 0);
+        if (-1 == evdns_base_nameserver_ip_add(evdns, name_server)) {
+            LOGE("Invalid name server: %s", name_server);
+            return EXIT_FAILURE;
+        }   
+    } else {
+        evdns = evdns_base_new(evbase, 1);
+        if (evdns_base_count_nameservers(evdns) == 0){
+            LOGE("System configured without nameserver");
+            return EXIT_FAILURE;
+        }
+    }
+
+    evdns_base_set_option(evdns, "randomize-case:", "0");
+
     evhtp_set_gencb(evhtp, frontend_cb, NULL);
 #endif
 
@@ -503,13 +529,24 @@ main(int argc, char ** argv) {
     ev_sigterm = evsignal_new(evbase, SIGTERM, sigterm_cb, evbase);
     evsignal_add(ev_sigterm, NULL);
 #endif
+    ev_sigint = evsignal_new(evbase, SIGINT, sigterm_cb, evbase);
+    evsignal_add(ev_sigint, NULL);
+
     if (0 == evhtp_bind_socket(evhtp, bind_address, port, 1024)) {
 		event_base_loop(evbase, 0);
 	} else {
 		LOGE("Bind address %s failed", bind_address);
 	}
 
+    event_free(ev_sigint);
+#ifndef WIN32
+    event_free(ev_sigterm);
+#endif
 
+    lru_fini();
+    evdns_base_free(evdns, 1);
+    evhtp_free(evhtp);
+    event_base_free(evbase);
     LOGD("Clean exit");
     return 0;
 }

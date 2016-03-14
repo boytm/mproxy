@@ -38,3 +38,7 @@ CMakeCache.txt
 # vim
 .swp
 *~
+
+# VC build directory
+/Debug
+/Release

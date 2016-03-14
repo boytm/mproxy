@@ -12,6 +12,10 @@
 #include "encrypt.h"
 #include "utils.h"
 
+#ifdef _MSC_VER
+#define alloca _alloca
+#endif
+
 void FATAL(const char *msg)
 {
 	LOGE("%s", msg);
@@ -73,7 +77,7 @@ static enum bufferevent_filter_result input_filter(struct evbuffer *src, struct 
 	do { \
 		int iovec_len = evbuffer_peek(src, -1, NULL, NULL, 0); \
  \
-		struct evbuffer_iovec vec_src[iovec_len]; \
+		struct evbuffer_iovec *vec_src = alloca(sizeof(struct evbuffer_iovec) * iovec_len); \
 		struct evbuffer_iovec vec_dst[1]; \
  \
 		evbuffer_peek(src, -1, NULL, vec_src, iovec_len); \
@@ -150,6 +154,7 @@ static enum bufferevent_filter_result output_filter(struct evbuffer *src, struct
 
 static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
 {
+    struct bufferevent *bev_filter = NULL;
 	ss_conn *conn = (ss_conn*)ctx;
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
 		LOGE("sock %d error", bufferevent_getfd(bev));
@@ -158,6 +163,7 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
 		conn->cb(NULL, conn->arg);
 
 		free_context(conn);
+        bufferevent_free(bev);
 	} else if (what & BEV_EVENT_CONNECTED) {
 		LOGD("upstrem connected with sock %d", bufferevent_getfd(bev));
 
@@ -168,10 +174,10 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
 		enc_ctx_init(g_ss_method, &conn->e_ctx, 1);
 		enc_ctx_init(g_ss_method, &conn->d_ctx, 0);
 
-        /* any changes in output evbuffer will call output_filter, so must be defered */
-		bev = bufferevent_filter_new(bev, input_filter, output_filter, BEV_OPT_CLOSE_ON_FREE/*|BEV_OPT_DEFER_CALLBACKS*/, free_context, ctx);
+        /* any changes in output evbuffer will call output_filter, so must be deferred */
+        bev_filter = bufferevent_filter_new(bev, input_filter, output_filter, BEV_OPT_CLOSE_ON_FREE/*|BEV_OPT_DEFER_CALLBACKS*/, free_context, ctx);
 
-		if (bev) {
+        if (bev_filter) {
 			/* same as SOCKS5 Requests
 			+------+----------+----------+
 			| ATYP | DST.ADDR | DST.PORT |
@@ -189,14 +195,17 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
 			memcpy(data + 2 + domain_len, &net_port, 2);
 
             /* currently BEV_OPT_DEFER_CALLBACKS no effect with bufferevent_filter_new(), so defer it manually */
-            evbuffer_defer_callbacks(bufferevent_get_output(bev), bufferevent_get_base(bev));
-			bufferevent_write(bev, data, 1 + 1 + domain_len + 2);
+            evbuffer_defer_callbacks(bufferevent_get_output(bev_filter), bufferevent_get_base(bev_filter));
+            bufferevent_write(bev_filter, data, 1 + 1 + domain_len + 2);
+
+            conn->cb(bev_filter, conn->arg);
 		} else {
 			LOGE("create filter event failed");
-			free_context(conn);
-		}
+            conn->cb(bev_filter, conn->arg);
 
-		conn->cb(bev, conn->arg);
+			free_context(conn);
+            bufferevent_free(bev);
+		}
 	}
 }
 
@@ -204,6 +213,9 @@ void connect_ss(struct event_base *evbase, struct evdns_base *evdns_base, const 
 {
 	struct bufferevent *bev = NULL;
 	ss_conn *conn = (ss_conn*)calloc(1, sizeof(ss_conn));
+    if (NULL == conn) {
+        goto fail;
+    }
 
 	strcpy(conn->host, hostname);
 	conn->port = port;

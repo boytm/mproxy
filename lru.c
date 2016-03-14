@@ -10,7 +10,7 @@
 #include "evhtp.h"
 #include "connector.h"
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 #define strcasecmp stricmp
 #endif
 #define container_of(ptr, type, member) ({ \
@@ -56,7 +56,7 @@ static int TreeItemCompare(const struct tree_item *lhs, const struct tree_item *
 
 static RB_HEAD(lru, tree_item) lru_head = RB_INITIALIZER(lru_head);
 RB_GENERATE(lru, tree_item, field, TreeItemCompare);
-struct event *timer_ev;
+struct event *timer_ev = NULL;
 
 evhtp_connection_t * cache_get(const char *hostname, int port)
 {
@@ -133,10 +133,19 @@ void cache_put(const char *hostname, int port, evhtp_connection_t *conn)
 
 }
 
+#ifndef TAILQ_FOREACH_REVERSE_SAFE
 #define	TAILQ_FOREACH_REVERSE_SAFE(var, head, headname, field, tvar)	\
 	for ((var) = TAILQ_LAST((head), headname);			\
 	(var) && ((tvar) = TAILQ_PREV((var), headname, field), 1);	\
 	(var) = (tvar))
+#endif
+
+#ifndef RB_FOREACH_SAFE
+#define RB_FOREACH_SAFE(x, name, head, tvar)				\
+	for ((x) = RB_MIN(name, head);					\
+	    ((x) != NULL) && ((tvar) = name ## _RB_NEXT(x), (x) != NULL);	\
+	     (x) = (tvar))
+#endif
 
 static void clear_item(struct connection_item *bi, int error)
 {
@@ -175,7 +184,7 @@ static void timercb(evutil_socket_t fd, short events, void *arg)
 	if (!TAILQ_EMPTY(&queue))
 	{
 		bi = TAILQ_LAST(&queue, queue);
-		struct timeval timeout = {LRU_LIFE + bi->last_use - now, 0};
+        struct timeval timeout = { .tv_sec = LRU_LIFE + bi->last_use - now, .tv_usec = 0 };
 		event_add(timer_ev, &timeout);
 	}
 }
@@ -214,6 +223,22 @@ static evhtp_res lru_conn_error(evhtp_connection_t * connection, evhtp_error_fla
 void lru_init(evbase_t *base)
 {
 	timer_ev = event_new(base, -1, 0, timercb, base);
+}
+
+void lru_fini()
+{
+    struct connection_item *bi = NULL;
+    struct connection_item *temp;
+
+    LOGD("LRU fini");
+    TAILQ_FOREACH_REVERSE_SAFE(bi, &queue, queue, queue_field, temp) {
+        clear_item(bi, 0);
+    }
+
+    if (timer_ev) {
+        event_del(timer_ev);
+        event_free(timer_ev);
+    }
 }
 
 void lru_get(const char *host, uint16_t port, lru_get_callback cb, void *arg)
