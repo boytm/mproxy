@@ -16,21 +16,30 @@ Why HTTP proxy instead of SOCKSs proxy? Because some client only support HTTP pr
 # Installation #
 
 ### Install required development components
-_libevent 2.12+ _,  _openssl_ (optional)
+_libevent 2.12+ _ (except libevent 2.22 stable),  _openssl_ (optional)
 
-Win32 require _MinGW_ and _MSYS_. 
+Win32 require _VC++ 2013_ or _MinGW and MSYS_ . 
 
 Linux require _cmake_ or _scons_.
 
 ### Compile 
-#### Win32 MinGW
-make -f Makefile.mingw
+#### Win32 
+* MinGW 
+>make -f Makefile.mingw
+
+* VC++ 2013
+open the _proxy.vcxproj_ directly, set your libevent and openssl directories then compile
+
 #### Linux
-cmake . && make 
+* enable all protocol
+>cmake . && make          
+
+* disable shadowsocks protocol
+>cmake . -DENABLE_SS:STRING=OFF && make     
 
 # Usage #
 
-    Mini HTTP proxy
+    Multi Mode HTTP proxy
     Usage:
       mproxy [options]
     Options:
@@ -40,6 +49,9 @@ cmake . && make
       -s <server_address>   socks5/ss server address
       -m <encrypt_method>   encrypt method of remote ss server
       -k <password>         password of remote ss server
+      --pac <pac_file>      pac file
+      --dns <nameserver>    name server
+      -V                    show version number and quit
       -h                    show help
 
 
@@ -61,5 +73,7 @@ worked as shadowsocks client, encrypt method aes-256-cfb, password mysspassword
 ### TODO
 
 use splice to speed up HTTP CONNECT socket relay under mode 1,2
+LRU with multi thread
+
 
 

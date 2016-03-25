@@ -16,12 +16,6 @@
 #define alloca _alloca
 #endif
 
-void FATAL(const char *msg)
-{
-	LOGE("%s", msg);
-	exit(-1);
-}
-
 /*
  * ss_conn
  */

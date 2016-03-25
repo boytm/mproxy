@@ -32,11 +32,16 @@ add_subdirectory(libevhtp)
 
 include_directories(libevhtp libevhtp/compat)
 
-set(MPROXY_SOURCES connector.c evhtp_proxy.c  evhtp_sock_relay.c  lru.c )
+set(MPROXY_SOURCES connector.c evhtp_proxy.c evhtp_sock_relay.c lru.c log.c )
+
 if (ENABLE_SS)
-        add_definitions(-DENABLE_SS=1)
-        set (MPROXY_SOURCES ${MPROXY_SOURCES} ss_connector.c encrypt.c )
+	add_definitions(-DENABLE_SS=1)
+	set(MPROXY_SOURCES ${MPROXY_SOURCES} ss_connector.c encrypt.c )
+	set(USE_CRYPTO_OPENSSL ON)
+else()
+	set(USE_CRYPTO_OPENSSL OFF)
 endif(ENABLE_SS)
+
 if (USE_CRYPTO_OPENSSL)
 	find_package(OpenSSL)
         add_definitions(-DUSE_CRYPTO_OPENSSL=1)

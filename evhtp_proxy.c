@@ -14,11 +14,22 @@
 # include <getopt.h>
 #endif
 #include <event2/dns.h>
+#ifdef ENABLE_SS
+# include <openssl/crypto.h> /* version */
+#endif
+
 #include "evhtp.h"
 
 #include "connector.h"
 
+#if LIBEVENT_VERSION_NUMBER == 0x02001600
+# error "libevent 2.0.22 coruppt http header"
+#endif
+
+#define PROGRAM_VERSION "0.2"
 #define MAX_OUTPUT (512*1024)
+#define DEFAULT_LISTEN_PORT 8081
+#define DEFAULT_BIND_ADDRESS "0.0.0.0"
 
 void relay(struct bufferevent *b_in, struct bufferevent *b_out);
 
@@ -397,17 +408,34 @@ init_thread_cb(evhtp_t * htp, evthr_t * thr, void * arg) {
 }
 #endif
 
+void version(const char *program)
+{
+    printf("%s " PROGRAM_VERSION " built at " __TIME__ " " __DATE__  "\n", program);
+    printf("  libevent %s\n", event_get_version());
+#ifdef ENABLE_SS
+    printf("  %s\n", SSLeay_version(SSLEAY_VERSION)); // OPENSSL_VERSION_TEXT SHLIB_VERSION_NUMBER
+#endif
+}
+
 void usage(const char *program)
 {
 	printf("\nUsage: %s [options]\n", program);
 	printf(
-        "  -l <local_port>       proxy listen port, default 8081\n"
-        "  -b <local_address>    local address to bind, default 0.0.0.0\n"
+        "  -l <local_port>       proxy listen port, default %d\n"
+        "  -b <local_address>    local address to bind, default " DEFAULT_BIND_ADDRESS "\n"
+#ifndef ENABLE_SS
+        "  -p <server_port>      socks5 server port\n"
+        "  -s <server_address>   socks5 server address\n"
+#else
         "  -p <server_port>      socks5/ss server port\n"
         "  -s <server_address>   socks5/ss server address\n"
         "  -m <encrypt_method>   encrypt method of remote ss server\n"
         "  -k <password>         password of remote ss server\n"
-        "  -h                    show help\n");
+        "  --pac <pac_file>      pac file\n"
+#endif
+        "  --dns <nameserver>    name server\n"
+        "  -V, --version         show version number and quit\n"
+        "  -h                    show help\n", DEFAULT_LISTEN_PORT);
 
 }
 
@@ -417,8 +445,8 @@ main(int argc, char ** argv) {
     struct event *ev_sigint;
     evbase_t    * evbase = NULL;
     evhtp_t     * evhtp = NULL;
-	int			  port = 8081; // default listen port
-	const char *bind_address = "0.0.0.0";
+	int			  port = DEFAULT_LISTEN_PORT; // default listen port
+	const char *bind_address = DEFAULT_BIND_ADDRESS;
 	const char *password = NULL;
 	const char *method = NULL;
     const char *name_server = NULL;
@@ -428,6 +456,7 @@ main(int argc, char ** argv) {
         {"pac", 1, 0, 1000},
         {"dns", 1, 0, 1001},
         {"help", 0, 0, 'h'},
+        {"version", 0, 0, 'V'},
         {0, 0, 0, 0}
     };
 
@@ -444,7 +473,7 @@ main(int argc, char ** argv) {
 
     log_init(NULL, LOG_LEVEL_DEBUG);
 
-	while ((opt = getopt_long(argc, argv, "hu:b:l:p:s:m:k:",
+	while ((opt = getopt_long(argc, argv, "hu:b:l:p:s:m:k:V",
                     long_options, &option_index)
                     ) != -1) 
 	{
@@ -473,6 +502,10 @@ main(int argc, char ** argv) {
             break;
         case 1001:
             name_server = optarg;
+            break;
+        case 'V':
+            version(argv[0]);
+            exit(EXIT_SUCCESS);
             break;
 		case 'h':
 		default:

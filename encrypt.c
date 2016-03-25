@@ -74,6 +74,13 @@ static void dump(char *tag, char *text, int len)
 }
 #endif
 
+#define FATAL(...) do \
+{ \
+    LOGE(__VA_ARGS__); \
+    exit(-1); \
+} while (0)
+
+
 static const char * supported_ciphers[CIPHER_NUM] =
 {
     "table",
