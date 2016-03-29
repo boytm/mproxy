@@ -3,6 +3,7 @@ env = Environment(CCFLAGS = '-g -O2 -Wall')
 env['CPPPATH'] = []
 env['LIBS'] = []
 env['CPPDEFINES'] = {}
+env['EVHTP_DIR'] = 'libevhtp'
 
 conf = Configure(env)
 if not conf.CheckLibWithHeader('event', 'event2/event.h', 'c'):
@@ -28,7 +29,6 @@ if env['PLATFORM'] in ('win32', 'mingw'):
 
 env.Decider('timestamp-match')
 
-env['EVHTP_DIR'] = 'libevhtp'
 env.Command('$EVHTP_DIR/evhtp-config.h', 'evhtp-config.h.win32', 'cp $SOURCES $TARGET')
 env.Append(CPPPATH = ['libevhtp', 'libevhtp/compat'])
 libevhtp_srcs = Split('libevhtp/evhtp.c libevhtp/evhtp_numtoa.c libevhtp/evthr.c libevhtp/htparse.c')

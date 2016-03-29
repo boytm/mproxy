@@ -2,17 +2,17 @@ cmake_minimum_required (VERSION 2.8)
 project(mproxy)
 
 set(MPROXY_MAJOR_VERSION 0)
-set(MPROXY_MINOR_VERSION 1)
-set(MPROXY_PATCH_VERSION 11)
+set(MPROXY_MINOR_VERSION 3)
+set(MPROXY_PATCH_VERSION 0)
 
 set(CMAKE_VERBOSE_MAKEFILE on)
 
 #set(CMAKE_C_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -g -O0")
 #set(CMAKE_C_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -O2")
 if( NOT CMAKE_BUILD_TYPE )
-  set( CMAKE_BUILD_TYPE Debug CACHE STRING
-       "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
-       FORCE )
+    set( CMAKE_BUILD_TYPE Debug CACHE STRING
+        "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
+        FORCE )
 endif()
 
 # -DENABLE_SS:STRING=ON
@@ -25,12 +25,13 @@ OPTION(USE_CRYPTO_OPENSSL "Use OpenSSL crypt library" ON)
 aux_source_directory(. DIR_SRCS)
 
 # libevhtp subdir
-set(EVHTP_DISABLE_SSL ON)
-set(EVHTP_DISABLE_EVTHR ON)
-set(EVHTP_DISABLE_REGEX ON)
+# add a variable of the same name to the cache, so options in subdirectory can be changed
+set(EVHTP_DISABLE_SSL ON CACHE BOOL "Disable ssl")
+set(EVHTP_DISABLE_EVTHR ON CACHE BOOL "Disable thread")
+set(EVHTP_DISABLE_REGEX ON CACHE BOOL "Disable regex")
 add_subdirectory(libevhtp)
 
-include_directories(libevhtp libevhtp/compat)
+include_directories(libevhtp libevhtp/compat libevhtp/oniguruma)
 
 set(MPROXY_SOURCES connector.c evhtp_proxy.c evhtp_sock_relay.c lru.c log.c )
 
