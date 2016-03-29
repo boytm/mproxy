@@ -50,9 +50,13 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
       -m <encrypt_method>   encrypt method of remote ss server
       -k <password>         password of remote ss server
       --pac <pac_file>      pac file
-      --dns <nameserver>    name server
+      --dns <ip:port>       name server, default port 53
       -V                    show version number and quit
       -h                    show help
+    Supported encrypt methods:
+      table, rc4, rc4-md5, aes-128-cfb, aes-192-cfb, aes-256-cfb, 
+      bf-cfb, camellia-128-cfb, camellia-192-cfb, camellia-256-cfb, 
+      cast5-cfb, des-cfb, idea-cfb, rc2-cfb, seed-cfb
 
 
 ### Examples
@@ -69,6 +73,9 @@ worked as shadowsocks client, encrypt method aes-256-cfb, password mysspassword
 
     ./mproxy -b127.0.0.1 -l8087 -s 127.0.0.1 -p 1080 -k mysspassword -m aes-256-cfb
 
+worked as shadowsocks client, encrypt method rc4-md5, password mysspassword, and serve local PAC file
+
+    ./mproxy -b127.0.0.1 -l8087 -s 127.0.0.1 -p 1080 -k mysspassword -m rc4-md5 --pac /path/to/pac/file
 
 ### TODO
 

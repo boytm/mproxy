@@ -1,0 +1,33 @@
+language: c
+
+compiler:
+  - clang
+  - gcc
+
+sudo: false
+
+branches:
+  except:
+    - /^v[0-9]/
+
+addons:
+  apt:
+    packages:
+      - autoconf
+      - cmake
+      - scons
+      - libssl-dev
+      - libevent-dev
+
+script:
+  - scons
+  - cmake . -DENABLE_SS:STRING=OFF && make
+
+notifications:
+  recipients:
+    - boycht@gmail.com
+  email:
+    on_success: change
+    on_failure: always
+
+# vim:set sts=2 sw=2 tw=0 et:
