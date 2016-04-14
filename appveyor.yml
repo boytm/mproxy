@@ -20,9 +20,9 @@ install:
 - appveyor DownloadFile https://slproweb.com/download/Win64OpenSSL-1_0_2g.exe
 - ps: Start-Process Win64OpenSSL-1_0_2g.exe -ArgumentList "/silent /verysilent /sp- /suppressmsgboxes" -Wait
   # Libevent
-- appveyor DownloadFile https://github.com/libevent/libevent/releases/download/release-2.0.21-stable/libevent-2.0.21-stable.tar.gz
-- 7z x libevent-2.0.21-stable.tar.gz -so | 7z x -si -ttar > nul
-- cd libevent-2.0.21-stable
+- appveyor DownloadFile https://github.com/libevent/libevent/releases/download/release-2.0.22-stable/libevent-2.0.22-stable.tar.gz
+- 7z x libevent-2.0.22-stable.tar.gz -so | 7z x -si -ttar > nul
+- cd libevent-2.0.22-stable
 - nmake -f Makefile.nmake
 - mkdir lib
 - move *.lib lib\
@@ -42,7 +42,7 @@ build_script:
 - set PATH=C:\Python27-x64\scripts;C:\Python27-x64;%PATH%
 - mkdir cmake-build
 - cd cmake-build
-- cmake -G "Visual Studio 14 2015 Win64" -DENABLE_SS:STRING=ON -DUSE_CRYPTO_OPENSSL:STRING=ON -DLIBEVENT_ROOT=C:\libevent-2.0.21-stable -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
+- cmake -G "Visual Studio 14 2015 Win64" -DENABLE_SS:STRING=ON -DUSE_CRYPTO_OPENSSL:STRING=ON -DLIBEVENT_ROOT=C:\libevent-2.0.22-stable -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
 - cmake --build . --config Release
 # TODO: 
 # - cpack
