@@ -16,15 +16,12 @@
 #include <event2/dns.h>
 #ifdef ENABLE_SS
 # include <openssl/crypto.h> /* version */
+# include "encrypt.h"
 #endif
 
 #include "evhtp.h"
 
 #include "connector.h"
-
-#if LIBEVENT_VERSION_NUMBER == 0x02001600
-# error "libevent 2.0.22 coruppt http header"
-#endif
 
 #define PROGRAM_VERSION "0.2"
 #define MAX_OUTPUT (512*1024)
@@ -99,7 +96,7 @@ frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
 	LOGE("evhtp frontend error");
 
-    if (req->status = EVHTP_RES_PAUSE) {
+    if (req->status == EVHTP_RES_PAUSE) {
         evhtp_request_resume(req); // paused connection cannot be freed automatically by socket EOF|error
     }
 
@@ -126,7 +123,7 @@ static evhtp_res
 backend_body(evhtp_request_t * req, evbuf_t * buf, void * arg) 
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
-	size_t len = evbuffer_get_length(buf);
+	//size_t len = evbuffer_get_length(buf);
 
 	//LOGD("relay http body, got %u bytes", (unsigned)len);
 	//fwrite(evbuffer_pullup(buf, len), 1, len, stdout);
@@ -212,7 +209,7 @@ make_request(evhtp_connection_t * conn,
 //                              evhtp_header_new("Connection", "close", 0, 0));
 
 
-    evbuffer_prepend_buffer(request->buffer_out, body);
+    evbuffer_add_buffer(request->buffer_out, body);
 
 	// hook
     evhtp_set_hook(&request->hooks, evhtp_hook_on_error, backend_conn_error, arg);
@@ -373,14 +370,11 @@ fail:
 static void response_proxy_pac_file(evhtp_request_t * frontend_req)
 {
     LOGD("response proxy.pac to client");
-    struct evbuffer *body = evbuffer_new();
-    if (body && g_proxy_pac_length) {
-        evbuffer_add_reference(body, g_proxy_pac_content, g_proxy_pac_length, NULL, NULL);
-
-        evbuffer_add_buffer(frontend_req->buffer_out, body);
+    if (g_proxy_pac_length) {
+        evhtp_headers_add_header(frontend_req->headers_out,
+                evhtp_header_new("Content-Type", "application/x-ns-proxy-autoconfig", 0, 0));
+        evbuffer_add_reference(frontend_req->buffer_out, g_proxy_pac_content, g_proxy_pac_length, NULL, NULL);
         evhtp_send_reply(frontend_req, EVHTP_RES_OK);
-
-        evbuffer_free(body);
     } else {
         evhtp_send_reply(frontend_req, EVHTP_RES_SERVERR); /* internal server error */
     }
@@ -410,10 +404,16 @@ init_thread_cb(evhtp_t * htp, evthr_t * thr, void * arg) {
 
 void version(const char *program)
 {
+    char buf[256] = {'\0'};
     printf("%s " PROGRAM_VERSION " built at " __TIME__ " " __DATE__  "\n", program);
     printf("  libevent %s\n", event_get_version());
 #ifdef ENABLE_SS
+# if defined(USE_CRYPTO_OPENSSL)
     printf("  %s\n", SSLeay_version(SSLEAY_VERSION)); // OPENSSL_VERSION_TEXT SHLIB_VERSION_NUMBER
+# elif defined(USE_CRYPTO_MBEDTLS)
+    mbedtls_version_get_string_full(buf);
+    printf("  %s\n", buf); // MBEDTLS_VERSION_STRING_FULL
+# endif
 #endif
 }
 

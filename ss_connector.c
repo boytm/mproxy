@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#ifdef _WIN32
+# include <malloc.h>
+#else
+# include <alloca.h>
+#endif
 
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
@@ -39,27 +44,14 @@ const char *g_ss_server;
 int g_ss_port;
 char *g_ss_key;
 
-#define BUF_SIZE (r)
-
 static void free_context(void *ctx)
 {
 	ss_conn *conn = (ss_conn*)ctx;
 
-	//if (conn->e_ctx != NULL) {
-		cipher_context_release(&conn->e_ctx.evp);
-		//free(conn->e_ctx);
-	//}
-	//if (conn->d_ctx != NULL) {
-		cipher_context_release(&conn->d_ctx.evp);
-		//free(conn->d_ctx);
-	//}
+    cipher_context_release(&conn->e_ctx.evp);
+    cipher_context_release(&conn->d_ctx.evp);
 
 	free(conn);
-}
-
-static void cleanupfn(const void *data, size_t datalen, void *extra)
-{
-	free((void *)data);
 }
 
 static enum bufferevent_filter_result input_filter(struct evbuffer *src, struct evbuffer *dst, ev_ssize_t dst_limit, enum bufferevent_flush_mode mode, void *ctx)
