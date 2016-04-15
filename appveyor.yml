@@ -13,6 +13,9 @@ environment:
   BOOST_LIBRARYDIR: C:\Libraries\boost_1_59_0\lib64-msvc-14.0
 
 install:
+  # recursive clone 
+- git submodule update --init --recursive
+  # VC env
 - '"C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x64'
 - cd \
   # OpenSSL
@@ -31,8 +34,6 @@ install:
 - cd ..
   # 
 - cd %APPVEYOR_BUILD_FOLDER%
-  # recursive clone 
-- git submodule update --init --recursive
 
 
 build_script:

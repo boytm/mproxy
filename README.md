@@ -1,6 +1,6 @@
 # mproxy
 [![Build Status](https://travis-ci.org/boytm/mproxy.svg?branch=master)](https://travis-ci.org/boytm/mproxy)
-[![Appveyor Build statusr(https://ci.appveyor.com/api/projects/status/github/boytm/mproxy)](https://ci.appveyor.com/project/boytm/mproxy)
+[![Appveyor Build status](https://ci.appveyor.com/api/projects/status/github/boytm/mproxy)](https://ci.appveyor.com/project/boytm/mproxy)
 
 
 mproxy is a multi mode http proxy. 
@@ -20,7 +20,7 @@ Why HTTP proxy instead of SOCKSs proxy? Because some client only support HTTP pr
 # Installation #
 
 ### Install required development components
-_libevent 2.12+ _ (except libevent 2.22 stable),  _OpenSSL or mbed TLS_ (optional)
+_libevent 2.12+_ (except libevent 2.22 stable),  _OpenSSL or mbed TLS_ (optional)
 
 Win32 require _VC++ 2013_ or _MinGW and MSYS_ . 
 
