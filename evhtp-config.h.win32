@@ -19,9 +19,11 @@ extern "C" {
 #  ifdef _MSC_VER
 #    define inline __inline
 #    define ssize_t int
-#    define strcasecmp stricmp
-#    define strncasecmp strnicmp
-#    define snprintf _snprintf
+#    define strcasecmp _stricmp
+#    define strncasecmp _strnicmp
+#    if _MSC_VER <= 1800 /* VC++ 2015 have C99 snprintf */
+#      define snprintf evutil_snprintf
+#    endif
 #  else
 #    define NO_STRNLEN 1
 #  endif

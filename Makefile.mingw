@@ -8,6 +8,7 @@ SYSINC:= $(LIBEVENT_DIR)/include/ \
 SYSLIB:= $(LIBEVENT_DIR)/.libs/ \
 	$(OPENSSL_DIR)/lib
 
+CC:= gcc
 CFLAGS:= -Wall -g -O2 -static -DNO_SYS_UN=1 -DENABLE_SS=1 \
 	-Ilibevhtp  -I libevhtp/compat/ \
 	-levent -lws2_32 \
@@ -19,6 +20,7 @@ sources:= evhtp_proxy.c evhtp_sock_relay.c connector.c lru.c log.c \
 	ss_connector.c encrypt.c \
 	libevhtp/evhtp.c libevhtp/htparse.c libevhtp/evhtp_numtoa.c 
 objects:= $(sources:.c=.o)
+depends:= $(sources:.c=.d)
 
 .PHONY: all clean
 
@@ -35,6 +37,8 @@ $(objects): %.o: %.c
 
 %.d: %.c
 	$(CC) -M $(CFLAGS) $< > $@
+
+$(depends) : libevhtp/evhtp-config.h libevhtp/compat/sys/queue.h libevhtp/compat/sys/tree.h
 
 include $(sources:.c=.d)
 
