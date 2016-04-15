@@ -29,8 +29,10 @@ install:
 - move WIN32-Code\event2\* include\event2\
 - move *.h include\
 - cd ..
-  #
+  # 
 - cd %APPVEYOR_BUILD_FOLDER%
+  # recursive clone 
+- git submodule update --init --recursive
 
 
 build_script:

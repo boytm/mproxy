@@ -1,5 +1,8 @@
 # mproxy
 [![Build Status](https://travis-ci.org/boytm/mproxy.svg?branch=master)](https://travis-ci.org/boytm/mproxy)
+[![Appveyor Build statusr(https://ci.appveyor.com/api/projects/status/github/boytm/mproxy)](https://ci.appveyor.com/project/boytm/mproxy)
+
+
 mproxy is a multi mode http proxy. 
 
 1. as a normal http proxy 
