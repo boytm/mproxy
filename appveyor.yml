@@ -1,7 +1,7 @@
 
 # build mproxy on AppVeyor - https://ci.appveyor.com
 
-shallow_clone: true
+#shallow_clone: true
 clone_depth: 10
 
 version: '{build}'
@@ -14,7 +14,7 @@ environment:
 
 install:
   # recursive clone 
-- git submodule update --init --recursive
+- git submodule update --init --recursive --depth 3
   # VC env
 - '"C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x64'
 - cd \
