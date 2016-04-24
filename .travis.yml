@@ -12,9 +12,11 @@ branches:
 
 addons:
   apt:
+    sources:
+      - george-edison55-precise-backports # cmake 3.2.3 / doxygen 1.8.3
     packages:
-      - autoconf
       - cmake
+      - cmake-data
       - scons
       - libssl-dev
       - libevent-dev
