@@ -23,7 +23,7 @@ install:
 - cd \
 - appveyor DownloadFile https://tls.mbed.org/download/mbedtls-2.2.1-apache.tgz
 - 7z x mbedtls-2.2.1-apache.tgz -so | 7z x -si -ttar > nul
-- cd mbedtls-2.2.1-apache
+- cd mbedtls-2.2.1
 - mkdir lib
 - mkdir cmake-build
 - cd cmake-build
