@@ -63,10 +63,10 @@ static inline const char* PRIORITY_TO_STRING(LogPriority prio)
 #define LOG(prio, fmt, ...) do {                                                               \
     if (prio >= log_prio_base) {                                                                   \
             time_t      t  = time(NULL);                                                               \
-            struct tm * dm = localtime(&t);                                                            \
+            struct tm dm; localtime_s(&dm, &t);                                                        \
                                                                                                        \
             fprintf(log_file, "[%02d:%02d:%02d] %s " __FILE__ ":[" _QUOTE(__LINE__) "]: " \
-                                    fmt "\n", dm->tm_hour, dm->tm_min, dm->tm_sec, PRIORITY_TO_STRING(prio), ## __VA_ARGS__);          \
+                                    fmt "\n", dm.tm_hour, dm.tm_min, dm.tm_sec, PRIORITY_TO_STRING(prio), ## __VA_ARGS__);          \
             fflush(log_file);                                                                            \
             }                                                                                                     \
 } while (0)
@@ -94,6 +94,9 @@ static inline const char* PRIORITY_TO_STRING(LogPriority prio)
 #define LOGW(fmt, ...) LOG(LOG_LEVEL_WARN, fmt, ## __VA_ARGS__)
 #define LOGE(fmt, ...) LOG(LOG_LEVEL_ERROR, fmt, ## __VA_ARGS__)
 #endif
+
+void log_init(const char *filename, LogPriority prio);
+void log_fini();
 
 #endif
 

@@ -4,8 +4,6 @@
 #include <assert.h>
 #ifdef _WIN32
 # include <malloc.h>
-#else
-# include <alloca.h>
 #endif
 
 #include <event2/bufferevent.h>

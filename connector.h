@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 #include <event2/dns.h>
 #include "evhtp.h"
 #include "utils.h"

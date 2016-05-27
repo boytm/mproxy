@@ -15,7 +15,11 @@
 #endif
 #include <event2/dns.h>
 #ifdef ENABLE_SS
-# include <openssl/crypto.h> /* version */
+# if defined(USE_CRYPTO_OPENSSL)
+#  include <openssl/crypto.h> /* version */
+# elif defined(USE_CRYPTO_MBEDTLS)
+#  include <mbedtls/version.h> /* version */
+# endif
 # include "encrypt.h"
 #endif
 
