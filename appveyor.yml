@@ -13,16 +13,25 @@ environment:
   BOOST_LIBRARYDIR: C:\Libraries\boost_1_59_0\lib64-msvc-14.0
 
 install:
+- ECHO "Filesystem root:"
+- ps: "ls \"C:/\""
   # recursive clone 
 - git submodule update --init --recursive --depth 3
   # VC env
 - '"C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x64'
+  # mbedTLS
 - cd \
-  # OpenSSL
-  # Unfurtunately, OpenSSL version below needs constant update (2 places) because old versions are quickly deleted.
-- appveyor DownloadFile https://slproweb.com/download/Win64OpenSSL-1_0_2g.exe
-- ps: Start-Process Win64OpenSSL-1_0_2g.exe -ArgumentList "/silent /verysilent /sp- /suppressmsgboxes" -Wait
+- appveyor DownloadFile https://tls.mbed.org/download/mbedtls-2.2.1-apache.tgz
+- 7z x mbedtls-2.2.1-apache.tgz -so | 7z x -si -ttar > nul
+- cd mbedtls-2.2.1-apache
+- mkdir lib
+- mkdir cmake-build
+- cd cmake-build
+- cmake ..
+- cmake --build . --config Release --target mbedtls
+- move library\Release\*.lib ..\lib\
   # Libevent
+- cd \
 - appveyor DownloadFile https://github.com/libevent/libevent/releases/download/release-2.0.22-stable/libevent-2.0.22-stable.tar.gz
 - 7z x libevent-2.0.22-stable.tar.gz -so | 7z x -si -ttar > nul
 - cd libevent-2.0.22-stable
