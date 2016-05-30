@@ -42,6 +42,7 @@ endif()
 
 set(MPROXY_SOURCES connector.c evhtp_proxy.c evhtp_sock_relay.c lru.c log.c )
 if (MSVC)
+    add_definitions(-D_WINSOCK_DEPRECATED_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS)
     set(MPROXY_SOURCES ${MPROXY_SOURCES} bsd_getopt.c )
 endif()
 
@@ -56,12 +57,16 @@ if (USE_CRYPTO_OPENSSL)
         set(USE_CRYPTO_OPENSSL OFF)
     endif()
 elseif (USE_CRYPTO_MBEDTLS)
-	find_path(MBEDTLS_INCLUDE_DIR mbedtls/cipher.h)
-    find_library(HAS_MBEDTLS_LIBRARY mbedtls)
-    if (MBEDTLS_INCLUDE_DIR AND HAS_MBEDTLS_LIBRARY)
-        include_directories(SYSTEM ${MBEDTLS_INCLUDE_DIR})
+    find_path(MBEDTLS_INCLUDE_DIR mbedtls/cipher.h 
+        HINTS ${MBEDTLS_ROOT_DIR} 
+        PATH_SUFFIXES include)
+    find_library(MBEDCRYPTO_LIBRARY mbedcrypto 
+        HINTS ${MBEDTLS_ROOT_DIR} 
+        PATH_SUFFIXES library lib)
+    if (MBEDTLS_INCLUDE_DIR AND MBEDCRYPTO_LIBRARY)
+        include_directories(${MBEDTLS_INCLUDE_DIR})
         add_definitions(-DUSE_CRYPTO_MBEDTLS=1)
-        set (MPROXY_LIBS ${MPROXY_LIBS} mbedcrypto)
+        set (MPROXY_LIBS ${MPROXY_LIBS} ${MBEDCRYPTO_LIBRARY})
     else()
         message(WARNING "Unable to find mbed TLS ")
         set(USE_CRYPTO_MBEDTLS OFF)
