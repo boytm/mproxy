@@ -27,7 +27,7 @@ install:
 - mkdir lib
 - mkdir cmake-build
 - cd cmake-build
-- cmake ..
+- cmake -G "Visual Studio 14 2015 Win64" .. 
 - cmake --build . --config Release --target mbedtls
 - move library\Release\*.lib ..\lib\
   # Libevent
