@@ -81,23 +81,26 @@ static void dump(char *tag, char *text, int len)
 } while (0)
 
 
-static const char * supported_ciphers[CIPHER_NUM] =
+static struct {
+    const char *name;
+    const cipher_kt_t *cipher;
+} supported_ciphers[CIPHER_NUM] =
 {
-    "table",
-    "rc4",
-    "rc4-md5",
-    "aes-128-cfb",
-    "aes-192-cfb",
-    "aes-256-cfb",
-    "bf-cfb",
-    "camellia-128-cfb",
-    "camellia-192-cfb",
-    "camellia-256-cfb",
-    "cast5-cfb",
-    "des-cfb",
-    "idea-cfb",
-    "rc2-cfb",
-    "seed-cfb"
+    {"table", NULL},
+    {"rc4", NULL},
+    {"rc4-md5", NULL},
+    {"aes-128-cfb", NULL},
+    {"aes-192-cfb", NULL},
+    {"aes-256-cfb", NULL},
+    {"bf-cfb", NULL},
+    {"camellia-128-cfb", NULL},
+    {"camellia-192-cfb", NULL},
+    {"camellia-256-cfb", NULL},
+    {"cast5-cfb", NULL},
+    {"des-cfb", NULL},
+    {"idea-cfb", NULL},
+    {"rc2-cfb", NULL},
+    {"seed-cfb", NULL},
 };
 
 #ifdef USE_CRYPTO_MBEDTLS
@@ -480,7 +483,7 @@ const cipher_kt_t *get_cipher_type(int method)
         method = RC4;
     }
 
-    const char *ciphername = supported_ciphers[method];
+    const char *ciphername = supported_ciphers[method].name;
 #if defined(USE_CRYPTO_OPENSSL)
     return EVP_get_cipherbyname(ciphername);
 #elif defined(USE_CRYPTO_MBEDTLS)
@@ -515,7 +518,7 @@ void cipher_context_init(cipher_ctx_t *ctx, int method, int enc)
         return;
     }
 
-    const char *ciphername = supported_ciphers[method];
+    const char *ciphername = supported_ciphers[method].name;
 #if defined(USE_CRYPTO_APPLECC)
     cipher_cc_t *cc = &ctx->cc;
     cc->cryptor = NULL;
@@ -536,7 +539,7 @@ void cipher_context_init(cipher_ctx_t *ctx, int method, int enc)
 #endif
 
     cipher_evp_t *evp = &ctx->evp;
-    const cipher_kt_t *cipher = get_cipher_type(method);
+    const cipher_kt_t *cipher = supported_ciphers[method].cipher;
 #if defined(USE_CRYPTO_OPENSSL)
     if (cipher == NULL) {
         LOGE("Cipher %s not found in OpenSSL library", ciphername);
@@ -915,7 +918,7 @@ void enc_key_init(int method, const char *pass)
             }
 #endif
             LOGE("Cipher %s not found in crypto library",
-                 supported_ciphers[method]);
+                 supported_ciphers[method].name);
             FATAL("Cannot initialize cipher");
         } while (0);
     }
@@ -934,6 +937,7 @@ void enc_key_init(int method, const char *pass)
         enc_iv_len = cipher_iv_size(cipher);
     }
     enc_method = method;
+    supported_ciphers[method].cipher = cipher;
 }
 
 int enc_init(const char *pass, const char *method)
@@ -941,7 +945,7 @@ int enc_init(const char *pass, const char *method)
     int m = TABLE;
     if (method != NULL) {
         for (m = TABLE; m < CIPHER_NUM; m++) {
-            if (strcmp(method, supported_ciphers[m]) == 0) {
+            if (strcmp(method, supported_ciphers[m].name) == 0) {
                 break;
             }
         }
