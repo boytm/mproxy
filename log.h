@@ -13,6 +13,10 @@
 # define inline __inline
 #endif
 
+#ifndef __FILENAME__
+# define __FILENAME__ __FILE__
+#endif
+
 #ifdef ANDROID
 # include <android/log.h>
 
@@ -65,7 +69,7 @@ static inline const char* PRIORITY_TO_STRING(LogPriority prio)
             time_t      t  = time(NULL);                                                               \
             struct tm dm; localtime_s(&dm, &t);                                                        \
                                                                                                        \
-            fprintf(log_file, "[%02d:%02d:%02d] %s " __FILE__ ":[" _QUOTE(__LINE__) "]: " \
+            fprintf(log_file, "[%02d:%02d:%02d] %s " __FILENAME__ ":[" _QUOTE(__LINE__) "]: " \
                                     fmt "\n", dm.tm_hour, dm.tm_min, dm.tm_sec, PRIORITY_TO_STRING(prio), ## __VA_ARGS__);          \
             fflush(log_file);                                                                            \
             }                                                                                                     \
@@ -76,7 +80,7 @@ static inline const char* PRIORITY_TO_STRING(LogPriority prio)
             time_t      t  = time(NULL);                                                               \
             struct tm * dm = localtime(&t);                                                            \
                                                                                                        \
-            fprintf(log_file, "[%02d:%02d:%02d] %s " __FILE__ ":[" _QUOTE(__LINE__) "]: " \
+            fprintf(log_file, "[%02d:%02d:%02d] %s " __FILENAME__ ":[" _QUOTE(__LINE__) "]: " \
                                     fmt "\n", dm->tm_hour, dm->tm_min, dm->tm_sec, PRIORITY_TO_STRING(prio), ## __VA_ARGS__);          \
             fflush(log_file);                                                                            \
     }                                                                                                  \

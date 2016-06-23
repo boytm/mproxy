@@ -438,8 +438,9 @@ void usage(const char *program)
         "  --pac <pac_file>      pac file\n"
 #endif
         "  --dns <nameserver>    name server\n"
+        "  -v, --verbose         verbose logging\n"
         "  -V, --version         show version number and quit\n"
-        "  -h                    show help\n", DEFAULT_LISTEN_PORT);
+        "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
 
 }
 
@@ -454,12 +455,14 @@ main(int argc, char ** argv) {
 	const char *password = NULL;
 	const char *method = NULL;
     const char *name_server = NULL;
+    int verbose = 0;
 	int opt;
     int option_index = 0;
     static struct option long_options[] = {
         {"pac", 1, 0, 1000},
         {"dns", 1, 0, 1001},
         {"help", 0, 0, 'h'},
+        {"verbose", 0, 0, 'v'},
         {"version", 0, 0, 'V'},
         {0, 0, 0, 0}
     };
@@ -475,9 +478,7 @@ main(int argc, char ** argv) {
 	err = WSAStartup(wVersionRequested, &wsaData);
 #endif
 
-    log_init(NULL, LOG_LEVEL_DEBUG);
-
-	while ((opt = getopt_long(argc, argv, "hu:b:l:p:s:m:k:V",
+	while ((opt = getopt_long(argc, argv, "hu:b:l:p:s:m:k:vV",
                     long_options, &option_index)
                     ) != -1) 
 	{
@@ -501,6 +502,9 @@ main(int argc, char ** argv) {
 		case 'l':
 			port = atoi(optarg);
 			break;
+        case 'v':
+            verbose = 1;
+            break;
         case 1000:
             g_proxy_pac_path = optarg;
             break;
@@ -518,6 +522,8 @@ main(int argc, char ** argv) {
 			break;
 		}
 	}
+
+    log_init(NULL, verbose ? LOG_LEVEL_DEBUG : LOG_LEVEL_INFO);
 
 #ifdef ENABLE_SS
 	if (password && method)

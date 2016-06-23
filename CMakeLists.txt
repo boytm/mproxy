@@ -24,6 +24,9 @@ OPTION(USE_CRYPTO_MBEDTLS "Use mbed TLS crypt library" OFF)
 # add source files to DIR_SRCS
 aux_source_directory(. DIR_SRCS)
 
+# generate relative file name for logging
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
+
 # libevhtp subdir
 # add a variable of the same name to the cache, so options in subdirectory can be changed
 set(EVHTP_DISABLE_SSL ON CACHE BOOL "Disable ssl")
