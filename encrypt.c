@@ -80,73 +80,58 @@ static void dump(char *tag, char *text, int len)
     exit(-1); \
 } while (0)
 
+#ifdef USE_CRYPTO_MBEDTLS
+# define _(mbedtls, cc) mbedtls
+# ifdef USE_CRYPTO_APPLECC
+#  define _(mbedtls, cc) mbedtls, cc
+# endif
+#else
+# define _(mbedtls, cc) 
+#endif
 
 static struct {
     const char *name;
     const int key_size;
     const int iv_size;
     const cipher_kt_t *cipher;
+#ifdef USE_CRYPTO_MBEDTLS
+    const char *cipher_mbedtls;
+#endif
+#ifdef USE_CRYPTO_APPLECC
+    CCAlgorithm cipher_applecc;
+#endif
 } supported_ciphers[CIPHER_NUM] =
 {
-    {"table",              0,    0, NULL},    
-    {"rc4",               16,    0, NULL},  
-    {"rc4-md5",           16,   16, NULL},      
-    {"aes-128-cfb",       16,   16, NULL},          
-    {"aes-192-cfb",       24,   16, NULL},          
-    {"aes-256-cfb",       32,   16, NULL},          
-    {"bf-cfb",            16,    8, NULL},     
-    {"camellia-128-cfb",  16,   16, NULL},               
-    {"camellia-192-cfb",  24,   16, NULL},               
-    {"camellia-256-cfb",  32,   16, NULL},               
-    {"cast5-cfb",         16,    8, NULL},        
-    {"des-cfb",            8,    8, NULL},      
-    {"idea-cfb",          16,    8, NULL},       
-    {"rc2-cfb",           16,    8, NULL},      
-    {"seed-cfb",          16,   16, NULL},       
+    {"table",              0,    0, NULL, _("table",               CCAlgorithmInvalid) },    
+    {"rc4",               16,    0, NULL, _("ARC4-128",            CCAlgorithmRC4)     },  
+    {"rc4-md5",           16,   16, NULL, _("ARC4-128",            CCAlgorithmRC4)     },      
+    {"aes-128-cfb",       16,   16, NULL, _("AES-128-CFB128",      CCAlgorithmAES)     },          
+    {"aes-192-cfb",       24,   16, NULL, _("AES-192-CFB128",      CCAlgorithmAES)     },          
+    {"aes-256-cfb",       32,   16, NULL, _("AES-256-CFB128",      CCAlgorithmAES)     },  
+    {"bf-cfb",            16,    8, NULL, _("BLOWFISH-CFB64",      CCAlgorithmBlowfish)},     
+    {"camellia-128-cfb",  16,   16, NULL, _("CAMELLIA-128-CFB128", CCAlgorithmInvalid) },               
+    {"camellia-192-cfb",  24,   16, NULL, _("CAMELLIA-192-CFB128", CCAlgorithmInvalid) },               
+    {"camellia-256-cfb",  32,   16, NULL, _("CAMELLIA-256-CFB128", CCAlgorithmInvalid) },               
+    {"cast5-cfb",         16,    8, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmCAST)    },        
+    {"des-cfb",            8,    8, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmDES)     },      
+    {"idea-cfb",          16,    8, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },       
+    {"rc2-cfb",           16,    8, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmRC2)     },      
+    {"seed-cfb",          16,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },       
+    {"aes-128-ofb",       16,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-ofb",       24,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-ofb",       32,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-128-ctr",       16,   16, NULL, _("AES-128-CTR",         CCAlgorithmInvalid) },
+    {"aes-192-ctr",       24,   16, NULL, _("AES-192-CTR",         CCAlgorithmInvalid) },
+    {"aes-256-ctr",       32,   16, NULL, _("AES-256-CTR",         CCAlgorithmInvalid) },
+    {"aes-128-cfb8",      16,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-cfb8",      24,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-cfb8",      32,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-128-cfb1",      16,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-cfb1",      24,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-cfb1",      32,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
 };
 
-#ifdef USE_CRYPTO_MBEDTLS
-static const char * supported_ciphers_mbedtls[CIPHER_NUM] =
-{
-    "table",
-    "ARC4-128",
-    "ARC4-128",
-    "AES-128-CFB128",
-    "AES-192-CFB128",
-    "AES-256-CFB128",
-    "BLOWFISH-CFB64",
-    "CAMELLIA-128-CFB128",
-    "CAMELLIA-192-CFB128",
-    "CAMELLIA-256-CFB128",
-    CIPHER_UNSUPPORTED,
-    CIPHER_UNSUPPORTED,
-    CIPHER_UNSUPPORTED,
-    CIPHER_UNSUPPORTED,
-    CIPHER_UNSUPPORTED
-};
-#endif
-
-#ifdef USE_CRYPTO_APPLECC
-static const CCAlgorithm supported_ciphers_applecc[CIPHER_NUM] =
-{
-    kCCAlgorithmInvalid,
-    kCCAlgorithmRC4,
-    kCCAlgorithmRC4,
-    kCCAlgorithmAES,
-    kCCAlgorithmAES,
-    kCCAlgorithmAES,
-    kCCAlgorithmBlowfish,
-    kCCAlgorithmInvalid,
-    kCCAlgorithmInvalid,
-    kCCAlgorithmInvalid,
-    kCCAlgorithmCAST,
-    kCCAlgorithmDES,
-    kCCAlgorithmInvalid,
-    kCCAlgorithmRC2,
-    kCCAlgorithmInvalid
-};
-
-#endif
+#undef _
 
 static int random_compare(const void *_x, const void *_y, uint32_t i,
                           uint64_t a)
@@ -480,7 +465,7 @@ const cipher_kt_t *get_cipher_type(int method)
 #if defined(USE_CRYPTO_OPENSSL)
     return EVP_get_cipherbyname(ciphername);
 #elif defined(USE_CRYPTO_MBEDTLS)
-    const char *mbedname = supported_ciphers_mbedtls[method];
+    const char *mbedname = supported_ciphers[method].cipher_mbedtls;
     if (strcmp(mbedname, CIPHER_UNSUPPORTED) == 0) {
         LOGE("Cipher %s currently is not supported by mbed TLS library",
              ciphername);
@@ -515,7 +500,7 @@ void cipher_context_init(cipher_ctx_t *ctx, int method, int enc)
 #if defined(USE_CRYPTO_APPLECC)
     cipher_cc_t *cc = &ctx->cc;
     cc->cryptor = NULL;
-    cc->cipher = supported_ciphers_applecc[method];
+    cc->cipher = supported_ciphers[method].cipher_applecc;
     if (cc->cipher == kCCAlgorithmInvalid) {
         cc->valid = kCCContextInvalid;
     } else {
@@ -905,7 +890,7 @@ void enc_key_init(int method, const char *pass)
     if (cipher == NULL) {
         do {
 #if defined(USE_CRYPTO_MBEDTLS) && defined(USE_CRYPTO_APPLECC)
-            if (supported_ciphers_applecc[method] != kCCAlgorithmInvalid) {
+            if (supported_ciphers[method].cipher_applecc != kCCAlgorithmInvalid) {
                 cipher_info.base = NULL;
                 cipher_info.key_length = supported_ciphers[method].key_size * 8;
                 cipher_info.iv_size = supported_ciphers[method].iv_size;

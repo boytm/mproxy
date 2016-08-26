@@ -106,7 +106,7 @@ typedef struct {
 
 #define BLOCK_SIZE 32
 
-#define CIPHER_NUM          15
+#define CIPHER_NUM          27
 #define NONE                -1
 #define TABLE               0
 #define RC4                 1
@@ -123,6 +123,18 @@ typedef struct {
 #define IDEA_CFB            12
 #define RC2_CFB             13
 #define SEED_CFB            14
+#define AES_128_OFB         15
+#define AES_192_OFB         16
+#define AES_256_OFB         17
+#define AES_128_CTR         18
+#define AES_192_CTR         19
+#define AES_256_CTR         20
+#define AES_128_CFB8        21
+#define AES_192_CFB8        22
+#define AES_256_CFB8        23
+#define AES_128_CFB1        24
+#define AES_192_CFB1        25
+#define AES_256_CFB1        26
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
