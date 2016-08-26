@@ -25,6 +25,7 @@
 #include "config.h"
 #endif
 
+#include <assert.h>
 #include <stdint.h>
 
 #if defined(USE_CRYPTO_OPENSSL)
@@ -59,7 +60,6 @@ static uint8_t *enc_table;
 static uint8_t *dec_table;
 static uint8_t enc_key[MAX_KEY_LENGTH];
 static int enc_key_len;
-static int enc_iv_len;
 static int enc_method;
 
 #ifdef DEBUG
@@ -83,24 +83,26 @@ static void dump(char *tag, char *text, int len)
 
 static struct {
     const char *name;
+    const int key_size;
+    const int iv_size;
     const cipher_kt_t *cipher;
 } supported_ciphers[CIPHER_NUM] =
 {
-    {"table", NULL},
-    {"rc4", NULL},
-    {"rc4-md5", NULL},
-    {"aes-128-cfb", NULL},
-    {"aes-192-cfb", NULL},
-    {"aes-256-cfb", NULL},
-    {"bf-cfb", NULL},
-    {"camellia-128-cfb", NULL},
-    {"camellia-192-cfb", NULL},
-    {"camellia-256-cfb", NULL},
-    {"cast5-cfb", NULL},
-    {"des-cfb", NULL},
-    {"idea-cfb", NULL},
-    {"rc2-cfb", NULL},
-    {"seed-cfb", NULL},
+    {"table",              0,    0, NULL},    
+    {"rc4",               16,    0, NULL},  
+    {"rc4-md5",           16,   16, NULL},      
+    {"aes-128-cfb",       16,   16, NULL},          
+    {"aes-192-cfb",       24,   16, NULL},          
+    {"aes-256-cfb",       32,   16, NULL},          
+    {"bf-cfb",            16,    8, NULL},     
+    {"camellia-128-cfb",  16,   16, NULL},               
+    {"camellia-192-cfb",  24,   16, NULL},               
+    {"camellia-256-cfb",  32,   16, NULL},               
+    {"cast5-cfb",         16,    8, NULL},        
+    {"des-cfb",            8,    8, NULL},      
+    {"idea-cfb",          16,    8, NULL},       
+    {"rc2-cfb",           16,    8, NULL},      
+    {"seed-cfb",          16,   16, NULL},       
 };
 
 #ifdef USE_CRYPTO_MBEDTLS
@@ -144,17 +146,6 @@ static const CCAlgorithm supported_ciphers_applecc[CIPHER_NUM] =
     kCCAlgorithmInvalid
 };
 
-#ifdef USE_CRYPTO_MBEDTLS
-static const int supported_ciphers_iv_size[CIPHER_NUM] =
-{
-    0, 0, 16, 16, 16, 16, 8, 16, 16, 16, 8, 8, 8, 8, 16
-};
-
-static const int supported_ciphers_key_size[CIPHER_NUM] =
-{
-    0, 16, 16, 16, 24, 32, 16, 16, 24, 32, 16, 8, 16, 16, 16
-};
-#endif
 #endif
 
 static int random_compare(const void *_x, const void *_y, uint32_t i,
@@ -237,7 +228,7 @@ static void merge_sort(uint8_t array[], int length,
 
 int enc_get_iv_len()
 {
-    return enc_iv_len;
+    return supported_ciphers[enc_method].iv_size;
 }
 
 unsigned char *enc_md5(const unsigned char *d, size_t n, unsigned char *md)
@@ -712,7 +703,7 @@ char * ss_encrypt_all(int buf_size, char *plaintext, ssize_t *len, int method)
         cipher_context_init(&evp, method, 1);
 
         int c_len = *len + BLOCK_SIZE;
-        int iv_len = enc_iv_len;
+        int iv_len = enc_get_iv_len();
         int err = 0;
         char *ciphertext = malloc(max(iv_len + c_len, buf_size));
 
@@ -762,7 +753,7 @@ char * ss_encrypt(char *ciphertext, char *plaintext, ssize_t *len,
 
         if (!ctx->init) {
             uint8_t iv[MAX_IV_LENGTH];
-            iv_len = enc_iv_len;
+            iv_len = enc_get_iv_len();
             cipher_context_set_iv(&ctx->evp, iv, iv_len, 1);
             memcpy(ciphertext, iv, iv_len);
             ctx->init = 1;
@@ -802,7 +793,7 @@ char * ss_decrypt_all(int buf_size, char *ciphertext, ssize_t *len, int method)
         cipher_context_init(&evp, method, 0);
 
         int p_len = *len + BLOCK_SIZE;
-        int iv_len = enc_iv_len;
+        int iv_len = enc_get_iv_len();
         int err = 0;
         char *plaintext = malloc(max(p_len, buf_size));
 
@@ -850,7 +841,10 @@ char * ss_decrypt(char *plaintext, char *ciphertext, ssize_t *len,
 
         if (!ctx->init) {
             uint8_t iv[MAX_IV_LENGTH];
-            iv_len = enc_iv_len;
+            iv_len = enc_get_iv_len();
+            if (*len < iv_len) {
+                return NULL;
+            }
             memcpy(iv, ciphertext, iv_len);
             cipher_context_set_iv(&ctx->evp, iv, iv_len, 0);
             ctx->init = 1;
@@ -913,8 +907,8 @@ void enc_key_init(int method, const char *pass)
 #if defined(USE_CRYPTO_MBEDTLS) && defined(USE_CRYPTO_APPLECC)
             if (supported_ciphers_applecc[method] != kCCAlgorithmInvalid) {
                 cipher_info.base = NULL;
-                cipher_info.key_length = supported_ciphers_key_size[method] * 8;
-                cipher_info.iv_size = supported_ciphers_iv_size[method];
+                cipher_info.key_length = supported_ciphers[method].key_size * 8;
+                cipher_info.iv_size = supported_ciphers[method].iv_size;
                 cipher = (const cipher_kt_t *)&cipher_info;
                 break;
             }
@@ -933,13 +927,10 @@ void enc_key_init(int method, const char *pass)
     if (enc_key_len == 0) {
         FATAL("Cannot generate key and IV");
     }
-    if (method == RC4_MD5) {
-        enc_iv_len = 16;
-    } else {
-        enc_iv_len = cipher_iv_size(cipher);
-    }
+
     enc_method = method;
     supported_ciphers[method].cipher = cipher;
+    assert(enc_key_len == supported_ciphers[method].key_size);
 }
 
 int enc_init(const char *pass, const char *method)
