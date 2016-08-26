@@ -303,10 +303,12 @@ int cipher_key_size(const cipher_kt_t *cipher)
     if (cipher == NULL) {
         return 0;
     }
+#if MBEDTLS_VERSION_NUMBER < 0x01020700
     /* Override mbed TLS 32 bit default key size with sane 128 bit default */
     if (cipher->type == MBEDTLS_CIPHER_BLOWFISH_CFB64) {
         return 128 / 8;
     }
+#endif
     return cipher->key_bitlen / 8;
 #endif
 }
