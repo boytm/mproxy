@@ -38,12 +38,12 @@ struct tree_item
 	char hostname[256];
 	int port;
 
-	TAILQ_HEAD(bev, connection_item) free_list;
+	TAILQ_HEAD(, connection_item) free_list;
 
 	RB_ENTRY(tree_item) field;
 };
 
-static TAILQ_HEAD(queue, connection_item) queue = TAILQ_HEAD_INITIALIZER(queue);
+TAILQ_HEAD(queue, connection_item);
 
 static int TreeItemCompare(const struct tree_item *lhs, const struct tree_item *rhs)
 {
@@ -54,9 +54,18 @@ static int TreeItemCompare(const struct tree_item *lhs, const struct tree_item *
 	}
 }
 
-static RB_HEAD(lru, tree_item) lru_head = RB_INITIALIZER(lru_head);
-RB_GENERATE(lru, tree_item, field, TreeItemCompare);
-struct event *timer_ev = NULL;
+RB_HEAD(lru_tree, tree_item);
+RB_GENERATE(lru_tree, tree_item, field, TreeItemCompare);
+
+struct lru_base
+{
+    struct queue queue;
+    struct lru_tree tree_head;
+    struct event_base *evbase;
+    struct event *timer_ev;
+};
+
+static struct lru_base *lru;
 
 evhtp_connection_t * cache_get(const char *hostname, int port)
 {
@@ -67,7 +76,7 @@ evhtp_connection_t * cache_get(const char *hostname, int port)
 	strcpy(item.hostname, hostname);
 	item.port = port;
 
-	ti = RB_FIND(lru, &lru_head, &item);
+	ti = RB_FIND(lru_tree, &lru->tree_head, &item);
 	if (ti) {
 		struct connection_item *bi = TAILQ_FIRST(&ti->free_list);
 		if (bi) {
@@ -75,13 +84,13 @@ evhtp_connection_t * cache_get(const char *hostname, int port)
 			LOGD("LRU get connection %p %s:%d, last %d", bi->connection, hostname, (int)port, (int)bi->last_use);
 			TAILQ_REMOVE(&ti->free_list, bi, tree_list_field); // remove from tree
 			if (TAILQ_EMPTY(&ti->free_list)) {
-				ti = RB_REMOVE(lru, &lru_head, ti); // list empty then erase tree item
+                ti = RB_REMOVE(lru_tree, &lru->tree_head, ti); // list empty then erase tree item
 				assert(ti);
 				free(ti);
 			}
 
 			bi->parent = NULL;
-			TAILQ_REMOVE(&queue, bi, queue_field); // remove from queue
+			TAILQ_REMOVE(&lru->queue, bi, queue_field); // remove from queue
 			retval = bi->connection;
 			evhtp_unset_hook(&bi->connection->hooks, evhtp_hook_on_conn_error);
 			free(bi);
@@ -99,7 +108,7 @@ void cache_put(const char *hostname, int port, evhtp_connection_t *conn)
 	strcpy(item.hostname, hostname);
 	item.port = port;
 
-	ti = RB_FIND(lru, &lru_head, &item);
+    ti = RB_FIND(lru_tree, &lru->tree_head, &item);
 	if (ti == NULL) {
 		ti = (struct tree_item *)calloc(1, sizeof(*ti));
 		assert(ti);
@@ -107,25 +116,27 @@ void cache_put(const char *hostname, int port, evhtp_connection_t *conn)
 		strcpy(ti->hostname, hostname);
 		ti->port = port;
 
-		if (RB_INSERT(lru, &lru_head, ti)) {
+        if (RB_INSERT(lru_tree, &lru->tree_head, ti)) {
 			assert(0);
 		}
 	}
 
 	{
+        struct timeval tv;
 		struct connection_item *bi = (struct connection_item *)calloc(1, sizeof(struct connection_item));
 		assert(bi);
 		bi->connection = conn;
-		bi->last_use = time(NULL);
+        event_base_gettimeofday_cached(lru->evbase, &tv);
+		bi->last_use = tv.tv_sec;
 		bi->parent = ti;
 		TAILQ_INSERT_HEAD(&ti->free_list, bi, tree_list_field); // insert tree list
 
 		// check clear timer
-		if (TAILQ_EMPTY(&queue) && event_pending(timer_ev, EV_TIMEOUT, NULL) == 0) { 
+		if (TAILQ_EMPTY(&lru->queue) && event_pending(lru->timer_ev, EV_TIMEOUT, NULL) == 0) { 
 			struct timeval timeout = {LRU_LIFE, 0};
-			event_add(timer_ev, &timeout);
+            event_add(lru->timer_ev, &timeout);
 		}
-		TAILQ_INSERT_HEAD(&queue, bi, queue_field); // insert into queue
+        TAILQ_INSERT_HEAD(&lru->queue, bi, queue_field); // insert into queue
 
 		evhtp_set_hook(&bi->connection->hooks, evhtp_hook_on_conn_error, lru_conn_error, bi);
 		LOGD("LRU put connection %p %s:%d, last %d", conn, hostname, (int)port, (int)bi->last_use);
@@ -155,12 +166,12 @@ static void clear_item(struct connection_item *bi, int error)
 	if (TAILQ_EMPTY(&bi->parent->free_list)) {
 		// empty tree item
 		struct tree_item *ti;
-		ti = RB_REMOVE(lru, &lru_head, bi->parent);
+        ti = RB_REMOVE(lru_tree, &lru->tree_head, bi->parent);
 		assert(ti && ti == bi->parent);
 		free(ti);
 	}
 
-	TAILQ_REMOVE(&queue, bi, queue_field); // remove from queue
+    TAILQ_REMOVE(&lru->queue, bi, queue_field); // remove from queue
 	evhtp_unset_hook(&bi->connection->hooks, evhtp_hook_on_conn_error);
 	if (!error)
 		evhtp_connection_free(bi->connection);
@@ -171,21 +182,22 @@ static void timercb(evutil_socket_t fd, short events, void *arg)
 {
 	struct connection_item *bi = NULL;
 	struct connection_item *temp;
-	time_t now = time(NULL);
+    struct timeval tv;
+    event_base_gettimeofday_cached(lru->evbase, &tv);
 
-	TAILQ_FOREACH_REVERSE_SAFE(bi, &queue, queue, queue_field, temp) {
-		if (now < LRU_LIFE + bi->last_use)
+    TAILQ_FOREACH_REVERSE_SAFE(bi, &lru->queue, queue, queue_field, temp) {
+		if (tv.tv_sec < LRU_LIFE + bi->last_use)
 			break;
 
-		LOGE("LRU timeout connection %p %s:%d, last %d, now %d", bi->connection, bi->parent->hostname, (int)bi->parent->port, (int)bi->last_use, (int)now);
+		LOGE("LRU timeout connection %p %s:%d, last %d, now %d", bi->connection, bi->parent->hostname, (int)bi->parent->port, (int)bi->last_use, (int)tv.tv_sec);
 		clear_item(bi, 0);
 	}
 
-	if (!TAILQ_EMPTY(&queue))
+    if (!TAILQ_EMPTY(&lru->queue))
 	{
-		bi = TAILQ_LAST(&queue, queue);
-        struct timeval timeout = { .tv_sec = LRU_LIFE + bi->last_use - now, .tv_usec = 0 };
-		event_add(timer_ev, &timeout);
+        bi = TAILQ_LAST(&lru->queue, queue);
+        struct timeval timeout = { .tv_sec = LRU_LIFE + bi->last_use - tv.tv_sec, .tv_usec = 0 };
+        event_add(lru->timer_ev, &timeout);
 	}
 }
 
@@ -222,7 +234,13 @@ static evhtp_res lru_conn_error(evhtp_connection_t * connection, evhtp_error_fla
 
 void lru_init(evbase_t *base)
 {
-	timer_ev = event_new(base, -1, 0, timercb, base);
+    lru = calloc(sizeof(struct lru_base), 1);
+    assert(lru);
+    TAILQ_INIT(&lru->queue);
+    RB_INIT(&lru->tree_head);
+
+    lru->evbase = base;
+    lru->timer_ev = event_new(base, -1, 0, timercb, base);
 }
 
 void lru_fini()
@@ -231,14 +249,17 @@ void lru_fini()
     struct connection_item *temp;
 
     LOGD("LRU fini");
-    TAILQ_FOREACH_REVERSE_SAFE(bi, &queue, queue, queue_field, temp) {
+    TAILQ_FOREACH_REVERSE_SAFE(bi, &lru->queue, queue, queue_field, temp) {
         clear_item(bi, 0);
     }
 
-    if (timer_ev) {
-        event_del(timer_ev);
-        event_free(timer_ev);
+    if (lru->timer_ev) {
+        event_del(lru->timer_ev);
+        event_free(lru->timer_ev);
     }
+
+    free(lru);
+    lru = NULL;
 }
 
 void lru_get(const char *host, uint16_t port, lru_get_callback cb, void *arg)
