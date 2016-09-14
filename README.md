@@ -22,7 +22,7 @@ Why HTTP proxy instead of SOCKSs proxy? Because some client only support HTTP pr
 ### Install required development components
 _libevent 2.12+_ (except libevent 2.22 stable),  _OpenSSL or mbed TLS_ (optional)
 
-Win32 require _VC++ 2013_ or _MinGW and MSYS_ . 
+Win32 require _VC++ 2013/2015_ or _MinGW and MSYS_ . 
 
 Linux require _cmake_ or _scons_.
 
@@ -31,7 +31,7 @@ Linux require _cmake_ or _scons_.
 * MinGW 
 >make -f Makefile.mingw
 
-* VC++ 2013
+* VC++ 2013/2015
 open the _proxy.vcxproj_ directly, set your libevent and openssl directories then compile
 
 #### Linux
@@ -49,18 +49,21 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
     Options:
       -l <local_port>       proxy listen port, default 8081
       -b <local_address>    local address to bind, default 0.0.0.0
-      -p <server_port>      socks5/ss server port
-      -s <server_address>   socks5/ss server address
-      -m <encrypt_method>   encrypt method of remote ss server
-      -k <password>         password of remote ss server
+      -p <server_port>      socks5/shadowsocks server port
+      -s <server_address>   socks5/shadowsocks server address
+      -m <encrypt_method>   encrypt method of remote shadowsocks server
+      -k <password>         password of remote shadowsocks server
       --pac <pac_file>      pac file
       --dns <ip:port>       name server, default port 53
       -V                    show version number and quit
       -h                    show help
-    Supported encrypt methods:
+    Supported encryption methods for shadowsocks:
       table, rc4, rc4-md5, aes-128-cfb, aes-192-cfb, aes-256-cfb, 
       bf-cfb, camellia-128-cfb, camellia-192-cfb, camellia-256-cfb, 
-      cast5-cfb, des-cfb, idea-cfb, rc2-cfb, seed-cfb
+      cast5-cfb, des-cfb, idea-cfb, rc2-cfb, seed-cfb, aes-128-ofb, 
+      aes-192-ofb, aes-256-ofb, aes-128-ctr, aes-192-ctr, aes-256-ctr, 
+      aes-128-cfb8, aes-192-cfb8, aes-256-cfb8, aes-128-cfb1, 
+      aes-192-cfb1, aes-256-cfb1,
 
 
 ### Examples
