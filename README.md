@@ -15,7 +15,8 @@ mproxy is a multi mode http proxy.
 
 Based on a modified libevhtp library, the original version have some bugs when as HTTP client library.
 
-Why HTTP proxy instead of SOCKSs proxy? Because some client only support HTTP proxy, for example IE9 only support SOCKS4.
+Why HTTP proxy instead of SOCKSs proxy? Because some client only support HTTP proxy, for example IE9 only support 
+SOCKS4/HTTP proxy, and some version control system like subversion mercurial only support HTTP proxy.
 
 # Installation #
 
@@ -63,7 +64,7 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
       cast5-cfb, des-cfb, idea-cfb, rc2-cfb, seed-cfb, aes-128-ofb, 
       aes-192-ofb, aes-256-ofb, aes-128-ctr, aes-192-ctr, aes-256-ctr, 
       aes-128-cfb8, aes-192-cfb8, aes-256-cfb8, aes-128-cfb1, 
-      aes-192-cfb1, aes-256-cfb1,
+      aes-192-cfb1, aes-256-cfb1
 
 
 ### Examples
@@ -76,13 +77,13 @@ convert local machine's SOCKS5 proxy at 127.0.0.1:1080 to HTTP proxy at 127.0.0.
 
     ./mproxy -b127.0.0.1 -l8087 -s 127.0.0.1 -p 1080
 
-worked as shadowsocks client, encrypt method aes-256-cfb, password mysspassword 
+worked as shadowsocks client, shadowsocks server address 9.9.9.9:9999, encrypt method aes-256-cfb, password mysspassword 
 
-    ./mproxy -b127.0.0.1 -l8087 -s 127.0.0.1 -p 1080 -k mysspassword -m aes-256-cfb
+    ./mproxy -b127.0.0.1 -l8087 -s 9.9.9.9 -p 9999 -k mysspassword -m aes-256-cfb
 
 worked as shadowsocks client, encrypt method rc4-md5, password mysspassword, and serve local PAC file
 
-    ./mproxy -b127.0.0.1 -l8087 -s 127.0.0.1 -p 1080 -k mysspassword -m rc4-md5 --pac /path/to/pac/file
+    ./mproxy -b127.0.0.1 -l8087 -s 9.9.9.9 -p 9999 -k mysspassword -m rc4-md5 --pac /path/to/pac/file
 
 ### TODO
 
