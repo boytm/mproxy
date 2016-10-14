@@ -1,7 +1,6 @@
 
-SHADOWSOCKS_DIR=/d/Sources/shadowsocks-libev
 OPENSSL_DIR=/d/openssl
-LIBEVENT_DIR=/d/Sources/libevent-2.0.21-stable
+LIBEVENT_DIR=/d/Sources/libevent-2.0.22-stable
 SYSINC:= $(LIBEVENT_DIR)/include/ \
 	$(LIBEVENT_DIR)/WIN32-Code/ \
 	$(OPENSSL_DIR)/include
@@ -9,7 +8,7 @@ SYSLIB:= $(LIBEVENT_DIR)/.libs/ \
 	$(OPENSSL_DIR)/lib
 
 CC:= gcc
-CFLAGS:= -Wall -g -O2 -static -DNO_SYS_UN=1 -DENABLE_SS=1 \
+CFLAGS:= -Wall -g -O2 -static -DNDEBUG -DNO_SYS_UN=1 -DENABLE_SS=1 \
 	-Ilibevhtp  -I libevhtp/compat/ \
 	-levent -lws2_32 \
 	-DUSE_CRYPTO_OPENSSL=1 -lcrypto \
@@ -35,7 +34,7 @@ libevhtp/compat/sys/tree.h libevhtp/compat/sys/queue.h : %.h : %.h.in
 $(objects): %.o: %.c
 	$(CC) -c $(CFLAGS) $< -o $@
 
-%.d: %.c
+$(sources:.c=.d): %.d: %.c
 	$(CC) -M $(CFLAGS) $< > $@
 
 $(depends) : libevhtp/evhtp-config.h libevhtp/compat/sys/queue.h libevhtp/compat/sys/tree.h
