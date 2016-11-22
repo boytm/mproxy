@@ -238,6 +238,7 @@ static void readcb(struct bufferevent *bev, void *ctx)
 		conn->cb(NULL, conn->arg);
 
 		free(conn);
+        bufferevent_free(bev); // protocol error, close socket
 	}
 }
 static void writecb(struct bufferevent *bev, void *ctx)
