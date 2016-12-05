@@ -49,7 +49,7 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
       mproxy [options]
     Options:
       -l <local_port>       proxy listen port, default 8081
-      -b <local_address>    local address to bind, default 0.0.0.0
+      -b <local_address>    local address to bind, default 0.0.0.0 . IPv6 address must start with "ipv6:"
       -p <server_port>      socks5/shadowsocks server port
       -s <server_address>   socks5/shadowsocks server address
       -m <encrypt_method>   encrypt method of remote shadowsocks server
@@ -71,7 +71,11 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
 
 simple http proxy, listen 127.0.0.1:8081
 
-    ./mproxy -b127.0.0.1
+    ./mproxy -b ipv4:127.0.0.1 -l8081
+
+simple http proxy, listen IPv6 [::1]:8081
+
+    ./mproxy -b ipv6:::1 -l8081
 
 convert local machine's SOCKS5 proxy at 127.0.0.1:1080 to HTTP proxy at 127.0.0.1:8087
 
