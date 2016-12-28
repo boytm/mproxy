@@ -155,5 +155,6 @@ int enc_init(const char *pass, const char *method);
 int enc_get_iv_len(void);
 void cipher_context_release(cipher_ctx_t *evp);
 unsigned char *enc_md5(const unsigned char *d, size_t n, unsigned char *md);
+void enc_print_all_methods(char *buf, size_t len);
 
 #endif // _ENCRYPT_H

@@ -423,6 +423,7 @@ void version(const char *program)
 
 void usage(const char *program)
 {
+    char buf[4096] = {'\0'};
 	printf("\nUsage: %s [options]\n", program);
 	printf(
         "  -l <local_port>       proxy listen port, default %d\n"
@@ -441,6 +442,12 @@ void usage(const char *program)
         "  -v, --verbose         verbose logging\n"
         "  -V, --version         show version number and quit\n"
         "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
+#ifdef ENABLE_SS
+    enc_print_all_methods(buf, sizeof(buf)/sizeof(buf[0]));
+	printf(
+        "\nSupported ss encryption methods:\n"
+        "  %s\n", buf);
+#endif
 
 }
 

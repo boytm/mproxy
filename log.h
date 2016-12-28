@@ -13,6 +13,8 @@
 
 #if _MSC_VER <= 1800 /* VC++ 2013 claim this, but still leads to C2065, so try VC++ 2015 */
 # define __func__ __FUNCTION__
+/* VC++ 2015 have C99 snprintf */
+# define snprintf evutil_snprintf
 #endif
 #if _MSC_VER
 # define inline __inline

@@ -940,4 +940,29 @@ int enc_init(const char *pass, const char *method)
     return m;
 }
 
+void enc_print_all_methods(char *buf, size_t len)
+{
+    int m = TABLE;
+    for (m = TABLE; m < CIPHER_NUM; m++) {
+        const char *ciphername = supported_ciphers[m].name;
+        if (ciphername
+#ifdef USE_CRYPTO_MBEDTLS
+                && supported_ciphers[m].cipher_mbedtls != CIPHER_UNSUPPORTED
+#endif
+#ifdef USE_CRYPTO_APPLECC
+                && supported_ciphers[m].cipher_applecc != CCAlgorithmInvalid
+#endif
+           ) {
+            int rc = snprintf(buf, len, (m == TABLE ? "%s" : ", %s"), ciphername);
+            if (rc < 0 || rc >= len) {
+                LOGE("Buffer too short");
+                break;
+            } else {
+                buf += rc;
+                len -= rc;
+            }
+        }
+    }
+}
+
 #endif
