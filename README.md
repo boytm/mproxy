@@ -55,7 +55,9 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
       -m <encrypt_method>   encrypt method of remote shadowsocks server
       -k <password>         password of remote shadowsocks server
       --pac <pac_file>      pac file
-      --dns <ip:port>       name server, default port 53
+      --dns <ip[:port]>     name server, default port 53
+      --user <user[:group]> set user and group
+      --pid-file <path>     pid file
       -V                    show version number and quit
       -h                    show help
     Supported encryption methods for shadowsocks:

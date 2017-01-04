@@ -40,7 +40,7 @@ else()
     set(MPROXY_LIBS ${MPROXY_LIBS} rt)
 endif()
 
-set(MPROXY_SOURCES connector.c evhtp_proxy.c evhtp_sock_relay.c lru.c log.c )
+set(MPROXY_SOURCES connector.c evhtp_proxy.c evhtp_sock_relay.c lru.c utils.c log.c )
 if (MSVC)
     add_definitions(-D_WINSOCK_DEPRECATED_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS)
     set(MPROXY_SOURCES ${MPROXY_SOURCES} bsd_getopt.c )

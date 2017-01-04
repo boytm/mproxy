@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <errno.h>
 #include <signal.h>
+
 #ifdef _MSC_VER
 # ifndef NDEBUG
 #  include "vld.h"
@@ -31,6 +32,7 @@
 #define MAX_OUTPUT (512*1024)
 #define DEFAULT_LISTEN_PORT 8081
 #define DEFAULT_BIND_ADDRESS "0.0.0.0"
+#define DEFAULT_SOCKS5_PORT 1080
 
 void relay(struct bufferevent *b_in, struct bufferevent *b_out);
 
@@ -46,7 +48,7 @@ static struct evdns_base  * evdnss[128] = {};
 struct evdns_base* evdns = NULL;
 #endif
 const char *g_socks_server = NULL;
-int g_socks_port = 1080;
+int g_socks_port = DEFAULT_SOCKS5_PORT;
 int use_syslog = 0;
 
 enum upstream_mode {
@@ -439,6 +441,10 @@ void usage(const char *program)
         "  --pac <pac_file>      pac file\n"
 #endif
         "  --dns <nameserver>    name server\n"
+#ifndef _WIN32
+        "  --user <user[:group]> set user and group\n"
+        "  --pid-file <path>     pid file\n"
+#endif
         "  -v, --verbose         verbose logging\n"
         "  -V, --version         show version number and quit\n"
         "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
@@ -451,30 +457,43 @@ void usage(const char *program)
 
 }
 
+enum {
+    OPTION_PAC =  1000,
+    OPTION_DNS,
+    OPTION_USERSPEC,
+    OPTION_PID_FILE,
+};
+
 int
 main(int argc, char ** argv) {
     struct event *ev_sigterm;
     struct event *ev_sigint;
-    evbase_t    * evbase = NULL;
-    evhtp_t     * evhtp = NULL;
+    evbase_t     *evbase = NULL;
+    evhtp_t      *evhtp = NULL;
 	int			  port = DEFAULT_LISTEN_PORT; // default listen port
 	const char *bind_address = DEFAULT_BIND_ADDRESS;
 	const char *password = NULL;
 	const char *method = NULL;
     const char *name_server = NULL;
+    const char *userspec = NULL;
+    const char *pid_file = NULL;
     int verbose = 0;
 	int opt;
     int option_index = 0;
     static struct option long_options[] = {
-        {"pac", 1, 0, 1000},
-        {"dns", 1, 0, 1001},
+        {"pac", 1, 0, OPTION_PAC},
+        {"dns", 1, 0, OPTION_DNS},
+#ifndef _WIN32
+        {"user", 1, 0, OPTION_USERSPEC},
+        {"pid-file", 1, 0, OPTION_PID_FILE},
+#endif
         {"help", 0, 0, 'h'},
         {"verbose", 0, 0, 'v'},
         {"version", 0, 0, 'V'},
         {0, 0, 0, 0}
     };
 
-#ifdef WIN32
+#ifdef _WIN32
 	WORD wVersionRequested;
 	WSADATA wsaData;
 	int err;
@@ -512,12 +531,20 @@ main(int argc, char ** argv) {
         case 'v':
             verbose = 1;
             break;
-        case 1000:
+        case OPTION_PAC:
             g_proxy_pac_path = optarg;
             break;
-        case 1001:
+        case OPTION_DNS:
             name_server = optarg;
             break;
+#ifndef _WIN32
+        case OPTION_USERSPEC:
+            userspec = optarg;
+            break;
+        case OPTION_PID_FILE:
+            pid_file = optarg;
+            break;
+#endif
         case 'V':
             version(argv[0]);
             exit(EXIT_SUCCESS);
@@ -547,13 +574,6 @@ main(int argc, char ** argv) {
 #endif
 
 	evbase  = event_base_new();
-	evhtp   = evhtp_new(evbase, NULL);
-
-#ifdef USE_THREAD
-    evhtp_set_gencb(evhtp, frontend_cb, NULL);
-    evhtp_use_threads(evhtp, init_thread_cb, 2, NULL);
-#else
-
     if (name_server) {
         evdns = evdns_base_new(evbase, 0);
         if (-1 == evdns_base_nameserver_ip_add(evdns, name_server)) {
@@ -570,26 +590,44 @@ main(int argc, char ** argv) {
 
     evdns_base_set_option(evdns, "randomize-case:", "0");
 
+	evhtp = evhtp_new(evbase, NULL);
+
+#ifdef USE_THREAD
+    evhtp_set_gencb(evhtp, frontend_cb, NULL);
+    evhtp_use_threads(evhtp, init_thread_cb, 2, NULL);
+#else
     evhtp_set_gencb(evhtp, frontend_cb, NULL);
 #endif
 
 	lru_init(evbase);
 
-#ifndef WIN32
+#ifndef _WIN32
     ev_sigterm = evsignal_new(evbase, SIGTERM, sigterm_cb, evbase);
     evsignal_add(ev_sigterm, NULL);
 #endif
     ev_sigint = evsignal_new(evbase, SIGINT, sigterm_cb, evbase);
     evsignal_add(ev_sigint, NULL);
 
-    if (0 == evhtp_bind_socket(evhtp, bind_address, port, 1024)) {
-		event_base_loop(evbase, 0);
-	} else {
+    if (0 != evhtp_bind_socket(evhtp, bind_address, port, 1024)) {
 		LOGE("Bind address %s failed", bind_address);
+        return EXIT_FAILURE;
 	}
 
+#ifndef _WIN32
+    if (pid_file && 0 != write_pid_file(pid_file)) {
+        LOGE("Write pid file failed");
+        return EXIT_FAILURE;
+    }
+    if (userspec && 0 != change_user(userspec)) {
+        LOGE("Change user failed");
+        return EXIT_FAILURE;
+    }
+#endif // !_WIN32
+
+    event_base_loop(evbase, 0);
+
     event_free(ev_sigint);
-#ifndef WIN32
+#ifndef _WIN32
     event_free(ev_sigterm);
 #endif
 

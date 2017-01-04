@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <stdio.h>
 
 #ifndef _WIN32
 # include <fcntl.h>
@@ -15,7 +16,7 @@
 #ifndef _WIN32
 int write_pid_file(const char *pid_file)
 {
-    int pidfd;
+    int pidfd = -1;
     char pidstr[100] = {0};
     int ret = 1;
     ssize_t len;
@@ -35,7 +36,7 @@ int write_pid_file(const char *pid_file)
     ret = 0; // success
 
 out:
-    if (pidfd) close(pidfd);
+    if (pidfd >= 0) close(pidfd);
     return ret;
 }
 
@@ -96,3 +97,39 @@ out:
     return ret;
 }
 #endif // !_WIN32
+
+void hexdump(FILE *out, const void *p, int len)
+{
+    const unsigned char *line;
+    int i;
+    int thisline;
+    int offset;
+
+    line = (const unsigned char *)p;
+    offset = 0;
+
+    while (offset < len) {
+        fprintf(out, "%04x ", offset);
+        thisline = len - offset;
+
+        if (thisline > 16) {
+            thisline = 16;
+        }
+
+        for (i = 0; i < thisline; i++) {
+            fprintf(out, "%02x ", line[i]);
+        }
+
+        for (; i < 16; i++) {
+            fprintf(out, "   ");
+        }
+
+        for (i = 0; i < thisline; i++) {
+            fprintf(out, "%c", (line[i] >= 0x20 && line[i] < 0x7f) ? line[i] : '.');
+        }
+
+        fprintf(out, "\n");
+        offset += thisline;
+        line += thisline;
+    }
+}

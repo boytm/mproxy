@@ -39,7 +39,7 @@ env.Program('evhtp_get', ['evhtp_get.c', ] + libevhtp_objs,
                 LIBS = ['event', 'pthread', 'rt'],
                 LIBPATH = ['/usr/local/lib', '/usr/lib', ])
 
-evhtp_proxy = env.Program('mproxy', Split('evhtp_proxy.c evhtp_sock_relay.c lru.c connector.c ss_connector.c encrypt.c log.c') + libevhtp_objs,
+evhtp_proxy = env.Program('mproxy', Split('evhtp_proxy.c evhtp_sock_relay.c lru.c connector.c ss_connector.c encrypt.c utils.c log.c') + libevhtp_objs,
 				CCFLAGS = env['CCFLAGS'] + ' -DUSE_CRYPTO_OPENSSL=1',
                 LIBS = ['event', 'crypto', 'pthread', 'rt'],
                 LIBPATH = ['/usr/local/lib', '/usr/lib', ])
