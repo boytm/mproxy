@@ -458,7 +458,7 @@ void usage(const char *program)
 }
 
 enum {
-    OPTION_PAC =  1000,
+    OPTION_PAC = CHAR_MAX + 1,
     OPTION_DNS,
     OPTION_USERSPEC,
     OPTION_PID_FILE,
@@ -481,27 +481,25 @@ main(int argc, char ** argv) {
 	int opt;
     int option_index = 0;
     static struct option long_options[] = {
-        {"pac", 1, 0, OPTION_PAC},
-        {"dns", 1, 0, OPTION_DNS},
+        {"pac", required_argument, NULL, OPTION_PAC},
+        {"dns", required_argument, NULL, OPTION_DNS},
 #ifndef _WIN32
-        {"user", 1, 0, OPTION_USERSPEC},
-        {"pid-file", 1, 0, OPTION_PID_FILE},
+        {"user", required_argument, NULL, OPTION_USERSPEC},
+        {"pid-file", required_argument, NULL, OPTION_PID_FILE},
 #endif
-        {"help", 0, 0, 'h'},
-        {"verbose", 0, 0, 'v'},
-        {"version", 0, 0, 'V'},
-        {0, 0, 0, 0}
+        {"help", no_argument, NULL, 'h'},
+        {"verbose", no_argument, NULL, 'v'},
+        {"version", no_argument, NULL, 'V'},
+        {NULL, 0, NULL, 0}
     };
 
 #ifdef _WIN32
-	WORD wVersionRequested;
 	WSADATA wsaData;
-	int err;
-
-	/* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
-	wVersionRequested = MAKEWORD(2, 2);
-
-	err = WSAStartup(wVersionRequested, &wsaData);
+	int err = WSAStartup(MAKEWORD(2, 2), &wsaData); // require Windows Sockets version 2.2
+    if (err != 0) {
+        fprintf(stderr, "WSAStartup failed with error: %d\n", err);
+        return EXIT_FAILURE;
+    }
 #endif
 
 	while ((opt = getopt_long(argc, argv, "hu:b:l:p:s:m:k:vV",
