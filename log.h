@@ -11,13 +11,13 @@
 # define DIRECTORY_SEPARATOR_CHAR '/'
 #endif
 
-#if _MSC_VER <= 1800 /* VC++ 2013 claim this, but still leads to C2065, so try VC++ 2015 */
-# define __func__ __FUNCTION__
-/* VC++ 2015 have C99 snprintf */
-# define snprintf evutil_snprintf
-#endif
-#if _MSC_VER
+#ifdef _MSC_VER
 # define inline __inline
+# if _MSC_VER <= 1800 /* VC++ 2013 claim this, but still leads to C2065, so try VC++ 2015 */
+#  define __func__ __FUNCTION__
+/* VC++ 2015 have C99 snprintf */
+#  define snprintf evutil_snprintf
+# endif
 #endif
 
 #define __FILENAME__ (strrchr(__FILE__, DIRECTORY_SEPARATOR_CHAR) ? \
@@ -26,7 +26,7 @@
 #ifdef ANDROID
 # include <android/log.h>
 
-#define TAG "minivtun"
+#define TAG "mproxy"
 
 #define LOG(prio, fmt, ...)                                                \
         ((void)__android_log_print(prio, TAG, \

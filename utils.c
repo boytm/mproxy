@@ -40,6 +40,10 @@ out:
     return ret;
 }
 
+/*
+ * getpwnam() and getgrnam() is MT-Unsafe
+ * return 0 on success
+ */
 int change_user(const char *userspec)
 {
     char buf[4096] = { '\0' };
