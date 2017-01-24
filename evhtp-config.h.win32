@@ -24,11 +24,6 @@ extern "C" {
 #    if _MSC_VER <= 1800 /* VC++ 2015 have C99 snprintf */
 #      define snprintf evutil_snprintf
 #    endif
-#  else
-#    define NO_STRNLEN 1
-#  endif
-#  if defined(__MINGW32__)
-#    define IPV6_V6ONLY 27
 #  endif
 #endif
 

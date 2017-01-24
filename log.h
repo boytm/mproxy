@@ -68,7 +68,7 @@ static inline const char* PRIORITY_TO_STRING(LogPriority prio)
 #undef case_statement
 }
 
-#ifdef _MSC_VER
+#if defined(_WIN32)
 /* The Visual C++ implementation will suppress a trailing comma if no arguments are passed to the ellipsis. */
 #define LOG(prio, fmt, ...) do {                                                               \
     if (prio >= log_prio_base) {                                                                   \
@@ -84,10 +84,10 @@ static inline const char* PRIORITY_TO_STRING(LogPriority prio)
 #define LOG(prio, fmt, ...) do {                                                               \
     if (prio >= log_prio_base) {                                                                   \
             time_t      t  = time(NULL);                                                               \
-            struct tm * dm = localtime(&t);                                                            \
+            struct tm dm; localtime_r(&t, &dm);                                                            \
                                                                                                        \
             fprintf(log_file, "[%02d:%02d:%02d] %s %s:[" _QUOTE(__LINE__) "]: " \
-                                    fmt "\n", dm->tm_hour, dm->tm_min, dm->tm_sec, PRIORITY_TO_STRING(prio), __FILENAME__, ## __VA_ARGS__);          \
+                                    fmt "\n", dm.tm_hour, dm.tm_min, dm.tm_sec, PRIORITY_TO_STRING(prio), __FILENAME__, ## __VA_ARGS__);          \
             fflush(log_file);                                                                            \
     }                                                                                                  \
 } while (0)
