@@ -232,15 +232,29 @@ static evhtp_res lru_conn_error(evhtp_connection_t * connection, evhtp_error_fla
 	return EVHTP_RES_OK;
 }
 
-void lru_init(evbase_t *base)
+int lru_init(evbase_t *base)
 {
     lru = calloc(sizeof(struct lru_base), 1);
-    assert(lru);
+    if (NULL == lru) {
+	    goto fail;
+    }
     TAILQ_INIT(&lru->queue);
     RB_INIT(&lru->tree_head);
 
     lru->evbase = base;
     lru->timer_ev = event_new(base, -1, 0, timercb, base);
+    if (NULL == lru->timer_ev) {
+	    goto fail;
+    }
+
+    return 0;
+
+fail:
+    if (lru) {
+	    free(lru);
+		lru = NULL;
+	}
+    return -1;
 }
 
 void lru_fini()
@@ -272,6 +286,7 @@ void lru_get(const char *host, uint16_t port, lru_get_callback cb, void *arg)
 	} else {
 		struct lru_connect_cb_arg *connect_arg = 
 			(struct lru_connect_cb_arg*)calloc(1, sizeof(struct lru_connect_cb_arg));
+		assert(connect_arg);
 		connect_arg->cb = cb;
 		connect_arg->req = req;
 		connect_upstream(req->conn->evbase, evdns, host, port, lru_connect_cb, connect_arg); // async connect

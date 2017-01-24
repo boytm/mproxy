@@ -30,7 +30,7 @@ typedef void (*lru_get_callback)(evhtp_connection_t *conn, void *arg);
 
 void lru_set(const char *host, uint16_t port, evhtp_connection_t *conn);
 void lru_get(const char *host, uint16_t port, lru_get_callback cb, void *arg);
-void lru_init(evbase_t *base);
+int lru_init(evbase_t *base);
 void lru_fini();
 
 
