@@ -77,7 +77,7 @@ static void
 backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
-	evhtp_request_t * backend_req = req;
+	//evhtp_request_t * backend_req = req;
 	LOGE("evhtp backend connect error");
 
 	evhtp_send_reply(frontend_req, EVHTP_RES_BADGATEWAY); // return 502 bad gateway, when connect fail
@@ -113,7 +113,7 @@ frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 	evhtp_connection_free(ev_conn);
 }
 
-static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg) 
+/*static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg) 
 {
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
 
@@ -123,7 +123,7 @@ static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg)
 	evhtp_unset_hook(&conn->hooks, evhtp_hook_on_write);
 	
 	return EVHTP_RES_OK;
-}
+}*/
 
 
 static evhtp_res
@@ -173,7 +173,8 @@ static evhtp_res backend_headers(evhtp_request_t * backend_req, evhtp_headers_t 
     evhtp_send_reply_chunk_start(frontend_req, evhtp_request_status(backend_req));
     evhtp_request_resume(frontend_req);
 
-	evhtp_set_hook(&backend_req->hooks, evhtp_hook_on_error, backend_trans_error, frontend_req);
+	evhtp_set_hook(&backend_req->hooks, evhtp_hook_on_error, 
+			(evhtp_hook)backend_trans_error, frontend_req);
 
     return EVHTP_RES_OK;
 }
@@ -219,11 +220,11 @@ make_request(evhtp_connection_t * conn,
     evbuffer_add_buffer(request->buffer_out, body);
 
 	// hook
-    evhtp_set_hook(&request->hooks, evhtp_hook_on_error, backend_conn_error, arg);
+    evhtp_set_hook(&request->hooks, evhtp_hook_on_error, (evhtp_hook)backend_conn_error, arg);
     evhtp_set_hook(&request->hooks, evhtp_hook_on_headers, backend_headers, arg);
     evhtp_set_hook(&request->hooks, evhtp_hook_on_read, backend_body, arg);
 
-    evhtp_set_hook(&frontend_req->hooks, evhtp_hook_on_error, frontend_error, request);
+    evhtp_set_hook(&frontend_req->hooks, evhtp_hook_on_error, (evhtp_hook)frontend_error, request);
 
     LOGD("Making backend request...");
     evhtp_make_request(conn, request, method, path);
@@ -411,13 +412,13 @@ init_thread_cb(evhtp_t * htp, evthr_t * thr, void * arg) {
 
 void version(const char *program)
 {
-    char buf[256] = {'\0'};
     printf("%s " PROGRAM_VERSION " built at " __TIME__ " " __DATE__  "\n", program);
     printf("  libevent %s\n", event_get_version());
 #ifdef ENABLE_SS
 # if defined(USE_CRYPTO_OPENSSL)
     printf("  %s\n", SSLeay_version(SSLEAY_VERSION)); // OPENSSL_VERSION_TEXT SHLIB_VERSION_NUMBER
 # elif defined(USE_CRYPTO_MBEDTLS)
+    char buf[256] = {'\0'};
     mbedtls_version_get_string_full(buf);
     printf("  %s\n", buf); // MBEDTLS_VERSION_STRING_FULL
 # endif
@@ -426,7 +427,6 @@ void version(const char *program)
 
 void usage(const char *program)
 {
-    char buf[4096] = {'\0'};
 	printf("\nUsage: %s [options]\n", program);
 	printf(
         "  -l <local_port>       proxy listen port, default %d\n"
@@ -450,6 +450,7 @@ void usage(const char *program)
         "  -V, --version         show version number and quit\n"
         "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
 #ifdef ENABLE_SS
+    char buf[4096] = {'\0'};
     enc_print_all_methods(buf, sizeof(buf)/sizeof(buf[0]));
 	printf(
         "\nSupported ss encryption methods:\n"
@@ -467,8 +468,6 @@ enum {
 
 int
 main(int argc, char ** argv) {
-    struct event *ev_sigterm;
-    struct event *ev_sigint;
     evbase_t     *evbase = NULL;
     evhtp_t      *evhtp = NULL;
 	int			  port = DEFAULT_LISTEN_PORT; // default listen port
@@ -476,8 +475,10 @@ main(int argc, char ** argv) {
 	const char *password = NULL;
 	const char *method = NULL;
     const char *name_server = NULL;
+#ifndef _WIN32
     const char *userspec = NULL;
     const char *pid_file = NULL;
+#endif
     int verbose = 0;
 	int opt;
     int option_index = 0;
@@ -601,9 +602,11 @@ main(int argc, char ** argv) {
 	lru_init(evbase);
 
 #ifndef _WIN32
+    struct event *ev_sigterm;
     ev_sigterm = evsignal_new(evbase, SIGTERM, sigterm_cb, evbase);
     evsignal_add(ev_sigterm, NULL);
 #endif
+    struct event *ev_sigint;
     ev_sigint = evsignal_new(evbase, SIGINT, sigterm_cb, evbase);
     evsignal_add(ev_sigint, NULL);
 

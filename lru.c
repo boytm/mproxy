@@ -138,7 +138,7 @@ void cache_put(const char *hostname, int port, evhtp_connection_t *conn)
 		}
         TAILQ_INSERT_HEAD(&lru->queue, bi, queue_field); // insert into queue
 
-		evhtp_set_hook(&bi->connection->hooks, evhtp_hook_on_conn_error, lru_conn_error, bi);
+		evhtp_set_hook(&bi->connection->hooks, evhtp_hook_on_conn_error, (evhtp_hook)lru_conn_error, bi);
 		LOGD("LRU put connection %p %s:%d, last %d", conn, hostname, (int)port, (int)bi->last_use);
 	}
 

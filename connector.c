@@ -199,7 +199,6 @@ static void read_reply(socks5_conn *conn)
 		goto fail ; // Unknown address type
 	}
 
-ok:
 	evbuffer_drain(buffer, consume);
 	conn->status = SCONN_CONNECT_TRANSMITTING;
 	return;
@@ -239,13 +238,6 @@ static void readcb(struct bufferevent *bev, void *ctx)
 
 		free(conn);
         bufferevent_free(bev); // protocol error, close socket
-	}
-}
-static void writecb(struct bufferevent *bev, void *ctx)
-{
-	socks5_conn *conn = (socks5_conn*)ctx;
-	if (conn->status == SCONN_INIT)	{
-		send_auth_methods(conn);
 	}
 }
 
