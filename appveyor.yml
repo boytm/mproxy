@@ -51,7 +51,7 @@ install:
 - appveyor DownloadFile https://github.com/libevent/libevent/releases/download/release-2.1.8-stable/libevent-2.1.8-stable.tar.gz
 - 7z x libevent-2.1.8-stable.tar.gz -so | 7z x -si -ttar > nul
 - cd libevent-2.1.8-stable
-- nmake -f Makefile.nmake
+- nmake -f Makefile.nmake static_libs
 - mkdir lib
 - move *.lib lib\
 - move WIN32-Code\event2\* include\event2\
