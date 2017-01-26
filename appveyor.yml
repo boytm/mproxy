@@ -54,7 +54,7 @@ install:
 - nmake -f Makefile.nmake static_libs
 - mkdir lib
 - move *.lib lib\
-- move WIN32-Code\event2\* include\event2\
+- move WIN32-Code\nmake\event2\* include\event2\
 - move *.h include\
 - cd ..
   # 
