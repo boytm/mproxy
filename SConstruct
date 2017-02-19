@@ -20,6 +20,10 @@ if not conf.CheckFunc('strndup'):
     conf.env.Append(CPPDEFINES = 'NO_STRNDUP=1')
 if not conf.CheckFunc('strnlen'):
     conf.env.Append(CPPDEFINES = 'NO_STRNLEN=1')
+if conf.CheckHeader('openssl/evp.h'):
+    conf.env.Append(CPPDEFINES = ['USE_CRYPTO_OPENSSL=1', 'ENABLE_SS=1'])
+if conf.CheckFunc('splice'):
+    conf.env.Append(CPPDEFINES = 'HAVE_SPLICE=1')
 
 env.Append(CPPDEFINES={"EVHTP_SYS_ARCH" : (8 * conf.CheckTypeSize("size_t"))})
 env = conf.Finish()
@@ -39,8 +43,8 @@ env.Program('evhtp_get', ['evhtp_get.c', ] + libevhtp_objs,
                 LIBS = ['event', 'pthread', 'rt'],
                 LIBPATH = ['/usr/local/lib', '/usr/lib', ])
 
-evhtp_proxy = env.Program('mproxy', Split('evhtp_proxy.c evhtp_sock_relay.c lru.c connector.c ss_connector.c encrypt.c utils.c log.c') + libevhtp_objs,
-				CCFLAGS = env['CCFLAGS'] + ' -DUSE_CRYPTO_OPENSSL=1',
+evhtp_proxy = env.Program('mproxy', Split('evhtp_proxy.c evhtp_sock_relay.c lru.c connector.c ss_connector.c encrypt.c log.c') + libevhtp_objs,
+				CCFLAGS = env['CCFLAGS'] + ' ',
                 LIBS = ['event', 'crypto', 'pthread', 'rt'],
                 LIBPATH = ['/usr/local/lib', '/usr/lib', ])
 

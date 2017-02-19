@@ -40,6 +40,11 @@ else()
     set(MPROXY_LIBS ${MPROXY_LIBS} rt)
 endif()
 
+CHECK_FUNCTION_EXISTS(splice HAVE_SPLICE)
+if (HAVE_SPLICE)
+    add_definitions(-DHAVE_SPLICE=1)
+endif()
+
 set(MPROXY_SOURCES connector.c evhtp_proxy.c evhtp_sock_relay.c lru.c utils.c log.c )
 if (MSVC)
     add_definitions(-D_WINSOCK_DEPRECATED_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS)

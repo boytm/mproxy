@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <unistd.h>
 #endif
 
 #include <event2/bufferevent.h>
@@ -136,23 +137,23 @@ struct pipe
 typedef struct sock_relay_ctx_t
 {
 	/* defer free, because of BEV_OPT_CLOSE_ON_FREE */
-    struct bufferevent *b_in, *b_out; 
+    struct bufferevent *frontend, *backend; 
 
-    int fd_in, fd_out;
+    int fd_fe, fd_be;
 
-    struct pipe pipe_in_out;
-    struct pipe pipe_out_in;
+    struct pipe pipe_fe_be;  /* channel: frontend -> pipe -> backend */
+    struct pipe pipe_be_fe;  /* channel: backend -> pipe -> frontend */
 
-    struct event *in_read;
-    struct event *in_write;
-    struct event *out_read;
-    struct event *out_write;
+    struct event *frontend_read;
+    struct event *frontend_write;
+    struct event *backend_read;
+    struct event *backend_write;
     int eof_bits;       /* indicate which channel should stop read */
 } sock_relay_ctx;
 
-#define IN_OUT_EOF 1
-#define OUT_IN_EOF 2
-#define BOTH_EOF (OUT_IN_EOF | IN_OUT_EOF)
+#define FRONTEND_BACKEND_EOF 1
+#define BACKEND_FRONTEND_EOF 2
+#define BOTH_EOF (FRONTEND_BACKEND_EOF | BACKEND_FRONTEND_EOF)
 
 int init_pipe(struct pipe *p)
 {
@@ -162,7 +163,7 @@ int init_pipe(struct pipe *p)
     int rc = pipe2(pipefd, O_NONBLOCK | O_CLOEXEC);
     if (rc == -1)
     {
-        perror("pipe2 failed");
+        LOGE("pipe2 failed: %s", strerror(errno));
         goto fail;
     }
     else
@@ -197,26 +198,23 @@ void fini_pipe(struct pipe *p)
     }
 }
 
-void sock_relay_ctx_free(sock_relay_ctx *conn)
+void sock_relay_ctx_free(sock_relay_ctx *ctx)
 {
-	LOGD("free with EOF bits %x", conn->eof_bits);
-	/*event_del(&conn->in_read);
-	  event_del(&conn->in_write);
-	  event_del(&conn->out_read);
-	  event_del(&conn->out_write);*/
+	LOGD("free with EOF bits %x", ctx->eof_bits);
+
 	/* event_del() and free resource */
-	event_free(conn->in_read);
-	event_free(conn->in_write);
-	event_free(conn->out_read);
-	event_free(conn->out_write);
+	event_free(ctx->frontend_read);
+	event_free(ctx->frontend_write);
+	event_free(ctx->backend_read);
+	event_free(ctx->backend_write);
 
-	fini_pipe(&conn->pipe_in_out);
-	fini_pipe(&conn->pipe_out_in);
+	fini_pipe(&ctx->pipe_fe_be);
+	fini_pipe(&ctx->pipe_be_fe);
 
-	bufferevent_free(conn->b_in);
-	bufferevent_free(conn->b_out);
+	bufferevent_free(ctx->frontend);
+	bufferevent_free(ctx->backend);
 
-	free(conn);
+	free(ctx);
 }
 
 #define MAX_DATA_IN_PIPE MAX_OUTPUT
@@ -224,12 +222,13 @@ void sock_relay_ctx_free(sock_relay_ctx *conn)
 /*
 * move from fd to pipe buffer
 */
-int socket_to_pipe(sock_relay_ctx *conn, int fd, struct pipe *pipe, size_t *count)
+int socket_to_pipe(sock_relay_ctx *ctx, int fd, struct pipe *pipe, size_t *count)
 {
     int retval = 0;
+    size_t len = *count;
 
-    while (*count) {
-        int rc = splice(fd, NULL, pipe->produce, NULL, *count, SPLICE_F_MOVE | SPLICE_F_NONBLOCK/* | SPLICE_F_MORE*/);
+    while (len) {
+        int rc = splice(fd, NULL, pipe->produce, NULL, len, SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
         if (rc < 0) {
             if (errno == EINTR) {
                 continue;
@@ -239,10 +238,6 @@ int socket_to_pipe(sock_relay_ctx *conn, int fd, struct pipe *pipe, size_t *coun
                 *   - pipe is full
                 *   - the connection is closed (kernel < 2.6.27.13)
                 */
-                if (pipe->data) {
-                    // TODO: maybe pipe full, so stop read
-                    break;
-                }
 
                 break;
             } else {
@@ -256,7 +251,7 @@ int socket_to_pipe(sock_relay_ctx *conn, int fd, struct pipe *pipe, size_t *coun
 
         } else {
             retval += rc;
-            *count -= rc;
+            len -= rc;
             pipe->data += rc;
 
 			LOGD("splice read %d bytes from fd %d", rc, fd);
@@ -279,13 +274,14 @@ fail:
 /*
 * move from pipe buffer to out_fd
 */
-int socket_from_pipe(sock_relay_ctx *conn, int fd, struct pipe *pipe, size_t *count)
+int socket_from_pipe(sock_relay_ctx *ctx, int fd, struct pipe *pipe, size_t *count)
 {
     int retval = 0;
+    size_t len = *count;
 
-    while (*count)
+    while (len)
     {
-        int rc = splice(pipe->consume, NULL, fd, NULL, *count, SPLICE_F_MOVE | SPLICE_F_NONBLOCK/* | SPLICE_F_MORE*/);
+        int rc = splice(pipe->consume, NULL, fd, NULL, len, SPLICE_F_MOVE | SPLICE_F_NONBLOCK/* | SPLICE_F_MORE*/);
         if (rc <= 0) {
             if (rc == 0 || errno == EAGAIN) {
                 break;
@@ -296,7 +292,7 @@ int socket_from_pipe(sock_relay_ctx *conn, int fd, struct pipe *pipe, size_t *co
                 goto fail;
             }
         } else {
-            *count -= rc;
+            len -= rc;
             pipe->data -= rc;
             retval += rc;
 
@@ -314,27 +310,29 @@ fail:
 
 static void relaycb(evutil_socket_t fd, short events, void *arg)
 {
-    sock_relay_ctx *conn = (sock_relay_ctx*)arg;
+    sock_relay_ctx *ctx = (sock_relay_ctx*)arg;
 
     if (events & EV_READ) {
-        int in = (fd == conn->fd_in);
-        struct pipe *pipe = (in ? &conn->pipe_in_out : &conn->pipe_out_in);
-        struct event *ev_write = (in ? conn->out_write : conn->in_write);
-        struct event *ev_read = (in ? conn->in_read : conn->out_read);
+        int to_be = (fd == ctx->fd_fe);
+        struct pipe *pipe = (to_be ? &ctx->pipe_fe_be : &ctx->pipe_be_fe);
+        struct event *ev_write = (to_be ? ctx->backend_write : ctx->frontend_write);
+        struct event *ev_read = (to_be ? ctx->frontend_read : ctx->backend_read);
+
         int try_write = (pipe->data == 0);
 		size_t count = MAX_DATA_IN_PIPE;
 
-        int rc = socket_to_pipe(conn, fd, pipe, &count);
+        int rc = socket_to_pipe(ctx, fd, pipe, &count);
 		if (rc < 0) {
             /* stop read when EOF or ERROR */
             event_del(ev_read);
-			conn->eof_bits |= (in ? IN_OUT_EOF : OUT_IN_EOF);
-			LOGD("set channel EOF bits %x", (in ? IN_OUT_EOF : OUT_IN_EOF));
+            int eof = (to_be ? FRONTEND_BACKEND_EOF : BACKEND_FRONTEND_EOF);
+			ctx->eof_bits |= eof;
+			LOGD("set channel EOF bits %x", eof);
 		}
 
         if (count > 0 && try_write) {
 			count = pipe->data;
-            rc = socket_from_pipe(conn, (in ? conn->fd_out : conn->fd_in), pipe, &count);
+            rc = socket_from_pipe(ctx, (to_be ? ctx->fd_be : ctx->fd_fe), pipe, &count);
         }
 
         if (pipe->data) {
@@ -343,18 +341,20 @@ static void relaycb(evutil_socket_t fd, short events, void *arg)
             event_add(ev_write, NULL);
         }
     } else if (events | EV_WRITE) {
-        int out = (fd == conn->fd_out);
-        struct pipe *pipe = (out ? &conn->pipe_in_out : &conn->pipe_out_in);
-        struct event *ev_write = (out ? conn->out_write : conn->in_write);
-        struct event *ev_read = (out ? conn->in_read : conn->out_read);
+        int to_be = (fd == ctx->fd_be);
+        struct pipe *pipe = (to_be ? &ctx->pipe_fe_be : &ctx->pipe_be_fe);
+        struct event *ev_write = (to_be ? ctx->backend_write : ctx->frontend_write);
+        struct event *ev_read = (to_be ? ctx->frontend_read : ctx->backend_read);
+
 		size_t count = pipe->data;
 
-        int rc = socket_from_pipe(conn, fd, pipe, &count);
+        int rc = socket_from_pipe(ctx, fd, pipe, &count);
 		if (rc < 0) {
 			/* stop write when ERROR */
 			event_del(ev_write);
-			conn->eof_bits |= (out ? IN_OUT_EOF : OUT_IN_EOF);
-			LOGD("set channel EOF bits %x", (out ? IN_OUT_EOF : OUT_IN_EOF));
+            int eof = (to_be ? FRONTEND_BACKEND_EOF : BACKEND_FRONTEND_EOF);
+			ctx->eof_bits |= eof;
+			LOGD("set channel EOF bits %x", eof);
 		}
 
         if (pipe->data == 0) {
@@ -364,11 +364,11 @@ static void relaycb(evutil_socket_t fd, short events, void *arg)
         }
     }
 
-	if (conn->eof_bits & BOTH_EOF) {
-		if (BOTH_EOF == (conn->eof_bits & BOTH_EOF)) {
-			sock_relay_ctx_free(conn); /* both channel detect error */
-		} else if (conn->pipe_in_out.data == 0 && conn->pipe_out_in.data == 0) {
-			sock_relay_ctx_free(conn); /* one socket EOF or error, but other channel wait read */
+	if (ctx->eof_bits & BOTH_EOF) {
+		if (BOTH_EOF == (ctx->eof_bits & BOTH_EOF)) {
+			sock_relay_ctx_free(ctx); /* both channel detect error */
+		} else if (ctx->pipe_fe_be.data == 0 && ctx->pipe_be_fe.data == 0) {
+			sock_relay_ctx_free(ctx); /* one socket EOF or error, but other channel wait read */
 		}
 	}
 }
@@ -389,7 +389,7 @@ int flush_bufferevent_to_pipe(struct bufferevent *bev, struct pipe *pipe)
         ssize_t rc = vmsplice(pipe->produce, iov,
             iovec_len, SPLICE_F_NONBLOCK);
         if (rc < 0) {
-            perror("vmsplice error");
+            LOGE("vmsplice error: %s", strerror(errno));
             return -1;
         }
         else if (rc != len)
@@ -419,17 +419,19 @@ relay(struct bufferevent *local, struct bufferevent *remote)
         sock_relay_ctx *conn = calloc(sizeof(sock_relay_ctx), 1);
         assert(conn);
 
-        conn->b_in = local;
-        conn->b_out = remote;
-        conn->fd_in = bufferevent_getfd(conn->b_in);
-        conn->fd_out = bufferevent_getfd(conn->b_out);
+        conn->frontend = local;
+        conn->backend = remote;
+        conn->fd_fe = bufferevent_getfd(conn->frontend);
+        conn->fd_be = bufferevent_getfd(conn->backend);
         bufferevent_disable(local, EV_READ | EV_WRITE);
         bufferevent_disable(remote, EV_READ | EV_WRITE);
 
-        init_pipe(&conn->pipe_in_out);
-        init_pipe(&conn->pipe_out_in);
+        if (-1 == init_pipe(&conn->pipe_fe_be) ||
+            -1 == init_pipe(&conn->pipe_be_fe)) {
+            goto fail;
+        }
 
-        struct event_base *base = bufferevent_get_base(conn->b_in);
+        struct event_base *base = bufferevent_get_base(conn->frontend);
 
         // relay input buffer
 #define RELAY_BUFFER(from, to)  do { \
@@ -442,29 +444,29 @@ relay(struct bufferevent *local, struct bufferevent *remote)
         RELAY_BUFFER(remote, local);
 
         // flush output buffer to pipe;
-        if (0 != flush_bufferevent_to_pipe(local, &conn->pipe_out_in) ||
-            0 != flush_bufferevent_to_pipe(remote, &conn->pipe_in_out)) {
+        if (0 != flush_bufferevent_to_pipe(local, &conn->pipe_be_fe) ||
+            0 != flush_bufferevent_to_pipe(remote, &conn->pipe_fe_be)) {
             goto fail;
         }
 
         // 
-        conn->in_read = event_new(base, conn->fd_in, EV_PERSIST | EV_READ, relaycb, conn);
-        conn->in_write = event_new(base, conn->fd_in, EV_PERSIST | EV_WRITE, relaycb, conn);
+        conn->frontend_read = event_new(base, conn->fd_fe, EV_PERSIST | EV_READ, relaycb, conn);
+        conn->frontend_write = event_new(base, conn->fd_fe, EV_PERSIST | EV_WRITE, relaycb, conn);
 
-        conn->out_read = event_new(base, conn->fd_out, EV_PERSIST | EV_READ, relaycb, conn);
-        conn->out_write = event_new(base, conn->fd_out, EV_PERSIST | EV_WRITE, relaycb, conn);
+        conn->backend_read = event_new(base, conn->fd_be, EV_PERSIST | EV_READ, relaycb, conn);
+        conn->backend_write = event_new(base, conn->fd_be, EV_PERSIST | EV_WRITE, relaycb, conn);
 
         // setup read or write event
-        if (conn->pipe_in_out.data) {
-            event_add(conn->out_write, NULL);
+        if (conn->pipe_fe_be.data) {
+            event_add(conn->backend_write, NULL);
         } else {
-            event_add(conn->in_read, NULL);
+            event_add(conn->frontend_read, NULL);
         }
 
-        if (conn->pipe_out_in.data) {
-            event_add(conn->in_write, NULL);
+        if (conn->pipe_be_fe.data) {
+            event_add(conn->frontend_write, NULL);
         } else {
-            event_add(conn->out_read, NULL);
+            event_add(conn->backend_read, NULL);
         }
 
 		return;
