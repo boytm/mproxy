@@ -29,7 +29,7 @@
 
 #include "connector.h"
 
-#define PROGRAM_VERSION "0.2"
+#define PROGRAM_VERSION "0.4"
 #define MAX_OUTPUT (512*1024)
 #define DEFAULT_LISTEN_PORT 8081
 #define DEFAULT_BIND_ADDRESS "0.0.0.0"
