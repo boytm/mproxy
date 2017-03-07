@@ -13,6 +13,8 @@ mproxy is a multi mode http proxy.
 
 3proxy can work as mode 1 and mode 2, but his threaded model cannot scale well.
 
+When possible, use splice to speed up HTTP CONNECT socket relay under mode 1,2.
+
 Based on a modified libevhtp library, the original version have some bugs when as HTTP client library.
 
 Why HTTP proxy instead of SOCKSs proxy? Because some client only support HTTP proxy, for example IE9 only support 
@@ -21,9 +23,9 @@ SOCKS4/HTTP proxy, and some version control system like subversion mercurial onl
 # Installation #
 
 ### Install required development components
-_libevent 2.12+_ (except libevent 2.22 stable),  _OpenSSL or mbed TLS_ (optional)
+_libevent 2.0.12+_ (except [libevent 2.0.22 stable](https://github.com/libevent/libevent/issues/335)),  _OpenSSL or mbed TLS_ (optional)
 
-Win32 require _VC++ 2013/2015_ or _MinGW and MSYS_ . 
+Win32 require _VC++ 2013/2015_ or _MinGW-w64 and MSYS_ . 
 
 Linux require _cmake_ or _scons_.
 
@@ -49,7 +51,8 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
       mproxy [options]
     Options:
       -l <local_port>       proxy listen port, default 8081
-      -b <local_address>    local address to bind, default 0.0.0.0 . IPv6 address must start with "ipv6:"
+      -b <local_address>    local address to bind, default 0.0.0.0; IPv6 address 
+                            must starts with "ipv6:"
       -p <server_port>      socks5/shadowsocks server port
       -s <server_address>   socks5/shadowsocks server address
       -m <encrypt_method>   encrypt method of remote shadowsocks server
@@ -93,7 +96,8 @@ worked as shadowsocks client, encrypt method rc4-md5, password mysspassword, and
 
 ### TODO
 
-use splice to speed up HTTP CONNECT socket relay under mode 1,2
+DNS cache
+
 LRU with multi thread
 
 
