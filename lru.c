@@ -189,7 +189,7 @@ static void timercb(evutil_socket_t fd, short events, void *arg)
 		if (tv.tv_sec < LRU_LIFE + bi->last_use)
 			break;
 
-		LOGE("LRU timeout connection %p %s:%d, last %d, now %d", bi->connection, bi->parent->hostname, (int)bi->parent->port, (int)bi->last_use, (int)tv.tv_sec);
+		LOGD("LRU timeout connection %p %s:%d, last %d, now %d", bi->connection, bi->parent->hostname, (int)bi->parent->port, (int)bi->last_use, (int)tv.tv_sec);
 		clear_item(bi, 0);
 	}
 
@@ -226,7 +226,7 @@ static evhtp_res lru_conn_error(evhtp_connection_t * connection, evhtp_error_fla
 {
 	struct connection_item *bi = (struct connection_item *)arg;
 	assert (bi && bi->parent && bi->connection == connection);
-	LOGE("connection %p hook error %s:%d", connection, bi->parent->hostname, (int)bi->parent->port);
+	LOGD("connection %p hook error %s:%d", connection, bi->parent->hostname, (int)bi->parent->port);
 	clear_item(bi, 1);
 
 	return EVHTP_RES_OK;
