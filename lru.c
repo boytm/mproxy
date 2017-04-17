@@ -214,6 +214,7 @@ static void lru_connect_cb(struct bufferevent *bev, void *arg)
 
 	if (bev) {
 		conn = evhtp_connection_new_from_bev(bev);
+		LOGD("create connection %p from bev %p", conn, evhtp_connection_get_bev(conn));
 	} else {
 		LOGE("lru_connect connect error");
 	}
@@ -226,7 +227,8 @@ static evhtp_res lru_conn_error(evhtp_connection_t * connection, evhtp_error_fla
 {
 	struct connection_item *bi = (struct connection_item *)arg;
 	assert (bi && bi->parent && bi->connection == connection);
-	LOGD("connection %p hook error %s:%d", connection, bi->parent->hostname, (int)bi->parent->port);
+	LOGD("connection %p (bev %p %s:%d) hook error %hhu", connection, evhtp_connection_get_bev(connection),
+			bi->parent->hostname, (int)bi->parent->port, errtype);
 	clear_item(bi, 1);
 
 	return EVHTP_RES_OK;
@@ -281,7 +283,7 @@ void lru_get(const char *host, uint16_t port, lru_get_callback cb, void *arg)
 	evhtp_request_t * req = (evhtp_request_t *)arg;
 	evhtp_connection_t *conn = cache_get(host, port);
 	if (conn) {
-		LOGD("get connection %p from cache %s:%d", conn, host, (int)port);
+		LOGD("LRU get connection %p (bev %p) from cache %s:%d", conn, evhtp_connection_get_bev(conn), host, (int)port);
 		cb(conn, arg);
 	} else {
 		struct lru_connect_cb_arg *connect_arg = 

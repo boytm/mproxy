@@ -95,8 +95,10 @@ eventcb(struct bufferevent *bev, short what, void *ctx)
 
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
 		if (what & BEV_EVENT_ERROR) {
-			LOGE("error with sock %d: %s", bufferevent_getfd(bev), 
-                    (errno ? strerror(errno) : ""));
+			LOGE("bev %p (sock %d) event: %hd, errno: %s", bev, bufferevent_getfd(bev), 
+					what, (errno ? strerror(errno) : ""));
+		} else {
+			LOGD("bev %p (sock %d) event: %hd", bev, bufferevent_getfd(bev), what);
 		}
 
 		if (partner) {
@@ -414,6 +416,7 @@ int flush_bufferevent_to_pipe(struct bufferevent *bev, struct pipe *pipe)
 void
 relay(struct bufferevent *local, struct bufferevent *remote)
 {
+    LOGD("relay bev %p <--> %p", local, remote);
 #ifdef HAVE_SPLICE
     if (use_splice && bufferevent_get_underlying(local) == NULL && bufferevent_get_underlying(remote) == NULL) {
         sock_relay_ctx *conn = calloc(sizeof(sock_relay_ctx), 1);

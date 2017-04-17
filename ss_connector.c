@@ -141,7 +141,8 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
     struct bufferevent *bev_filter = NULL;
 	ss_conn *conn = (ss_conn*)ctx;
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
-		LOGE("sock %d error", bufferevent_getfd(bev));
+		// during handshake, EOF is an error also
+		LOGE("bev %p (sock %d) event: %hd", bev, bufferevent_getfd(bev), what);
 
 		// error
 		conn->cb(NULL, conn->arg);
@@ -149,7 +150,7 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
 		free_context(conn);
         bufferevent_free(bev);
 	} else if (what & BEV_EVENT_CONNECTED) {
-		LOGD("upstrem connected with sock %d", bufferevent_getfd(bev));
+		LOGD("upstrem connected with bev %p (sock %d)", bev, bufferevent_getfd(bev));
 
 		/* TCP */
 		bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
@@ -162,6 +163,8 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
         bev_filter = bufferevent_filter_new(bev, input_filter, output_filter, BEV_OPT_CLOSE_ON_FREE/*|BEV_OPT_DEFER_CALLBACKS*/, free_context, ctx);
 
         if (bev_filter) {
+			LOGD("create filter bev %p from bev %p ", bev_filter, bev);
+
 			/* same as SOCKS5 Requests
 			+------+----------+----------+
 			| ATYP | DST.ADDR | DST.PORT |

@@ -77,8 +77,8 @@ static void
 backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
-	//evhtp_request_t * backend_req = req;
-	LOGE("evhtp backend connect error");
+	evhtp_request_t * backend_req = req;
+	LOGE("evhtp backend req %p error %hhu while transport HTTP header", backend_req, errtype);
 
 	evhtp_send_reply(frontend_req, EVHTP_RES_BADGATEWAY); // return 502 bad gateway, when connect fail
 	evhtp_request_resume(frontend_req);
@@ -92,7 +92,7 @@ backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_request_t * backend_req = req;
-	LOGE("evhtp backend transport error");
+	LOGE("evhtp backend req %p error %hhu while transport HTTP body", backend_req, errtype);
 
 	backend_cb(backend_req, frontend_req); // finish transport
 }
@@ -101,7 +101,7 @@ static void
 frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
 {
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
-	LOGE("evhtp frontend error");
+	LOGE("evhtp frontend req %p error %hhu, cancel backend req %p", req, errtype, backend_req);
 
     if (req->status == EVHTP_RES_PAUSE) {
         evhtp_request_resume(req); // paused connection cannot be freed automatically by socket EOF|error
@@ -154,7 +154,7 @@ static evhtp_res backend_headers(evhtp_request_t * backend_req, evhtp_headers_t 
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_header_t *kv = NULL;
 
-    LOGD("all headers ok");
+    LOGD("backend req %p all headers ok", backend_req);
 
 	TAILQ_FOREACH(kv, headers, next) {
 		//printf("%*s:%*s\n", kv->klen, kv->key, kv->vlen, kv->val);
@@ -177,6 +177,11 @@ static evhtp_res backend_headers(evhtp_request_t * backend_req, evhtp_headers_t 
 			(evhtp_hook)backend_trans_error, frontend_req);
 
     return EVHTP_RES_OK;
+}
+void backend_eventcb(evhtp_connection_t *c, short events, void *arg)
+{
+    evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
+    LOGD("backend connection %p (paused %d) event %hd, frontend req %p", c, c->paused, events, frontend_req);
 }
 
 int
@@ -223,10 +228,11 @@ make_request(evhtp_connection_t * conn,
     evhtp_set_hook(&request->hooks, evhtp_hook_on_error, (evhtp_hook)backend_conn_error, arg);
     evhtp_set_hook(&request->hooks, evhtp_hook_on_headers, backend_headers, arg);
     evhtp_set_hook(&request->hooks, evhtp_hook_on_read, backend_body, arg);
+    evhtp_set_hook(&conn->hooks, evhtp_hook_on_event, (evhtp_hook)backend_eventcb, arg);
 
     evhtp_set_hook(&frontend_req->hooks, evhtp_hook_on_error, (evhtp_hook)frontend_error, request);
 
-    LOGD("Making backend request...");
+    LOGD("frontend req %p making backend request %p (connection %p), path %s", frontend_req, request, conn, path);
     evhtp_make_request(conn, request, method, path);
 
     return 0;
@@ -237,7 +243,7 @@ backend_cb(evhtp_request_t * backend_req, void * arg) {
 	//evhtp_header_t *header = NULL;
     evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 
-    LOGD("finish http response.");
+    LOGD("backend req %p (connection %p) finish http response.", backend_req, backend_req->conn);
     evhtp_send_reply_chunk_end(frontend_req);
 
     evhtp_unset_hook(&frontend_req->hooks, evhtp_hook_on_error);
@@ -270,14 +276,14 @@ frontend_cb(evhtp_request_t * req, void * arg) {
 
     const char *host = req->uri->authority->hostname; 
     uint16_t port = req->uri->authority->port ? req->uri->authority->port : 80;
-    LOGD("http request for %s:%u", host, port);
+    LOGD("frontend req %p receive HTTP request for %s:%u", req, host, port);
 
     if (host == NULL) {
         // non proxy request, so return proxy.pac file
         return response_proxy_pac_file(req);
     }
     if (strlen(host) > 255) {
-        LOGE("domain too long");
+        LOGE("domain %s too long", host);
         return evhtp_send_reply(req, EVHTP_RES_SERVERR);
     }
 
@@ -302,7 +308,7 @@ void connect_cb(struct bufferevent *bev, void *arg)
 		return;
 	}
 
-	LOGD("relay http socket.");
+	LOGD("ready to relay http socket for frontend req %p", req);
 	evbev_t * b_in = evhtp_request_take_ownership(req);
     evhtp_connection_free(evhtp_request_get_connection(req));
 
@@ -613,7 +619,8 @@ main(int argc, char ** argv) {
     if (0 != evhtp_bind_socket(evhtp, bind_address, port, 1024)) {
 		LOGE("Bind address %s failed", bind_address);
         return EXIT_FAILURE;
-	}
+    }
+    LOGI("listen at %s:%hu", bind_address, port);
 
 #ifndef _WIN32
     if (pid_file && 0 != write_pid_file(pid_file)) {

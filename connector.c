@@ -245,7 +245,8 @@ static void eventcb(struct bufferevent *bev, short what, void *ctx)
 {
 	socks5_conn *conn = (socks5_conn*)ctx;
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
-		LOGE("sock %d error", bufferevent_getfd(bev));
+		// during handshake, EOF is an error also
+		LOGE("bev %p (sock %d) event: %hd", bev, bufferevent_getfd(bev), what);
 
 		// error
 		conn->cb(NULL, conn->arg);
@@ -253,7 +254,7 @@ static void eventcb(struct bufferevent *bev, short what, void *ctx)
 		free(conn);
         bufferevent_free(bev);
 	} else if (what & BEV_EVENT_CONNECTED) {
-		LOGD("connected with sock %d", bufferevent_getfd(bev));
+		LOGD("upstrem connected with bev %p (sock %d)", bev, bufferevent_getfd(bev));
 
 		if (conn->status == SCONN_INIT)	{
 			/* socks5 */
