@@ -78,7 +78,7 @@ backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_request_t * backend_req = req;
-	LOGE("evhtp backend req %p error %hhu while transport HTTP header", backend_req, errtype);
+	LOGE("evhtp backend req %p error %hu while transport HTTP header", backend_req, errtype);
 
 	evhtp_send_reply(frontend_req, EVHTP_RES_BADGATEWAY); // return 502 bad gateway, when connect fail
 	evhtp_request_resume(frontend_req);
@@ -92,7 +92,7 @@ backend_trans_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg
 {
 	evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 	evhtp_request_t * backend_req = req;
-	LOGE("evhtp backend req %p error %hhu while transport HTTP body", backend_req, errtype);
+	LOGE("evhtp backend req %p error %hu while transport HTTP body", backend_req, errtype);
 
 	backend_cb(backend_req, frontend_req); // finish transport
 }
@@ -101,7 +101,7 @@ static void
 frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg) 
 {
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
-	LOGE("evhtp frontend req %p error %hhu, cancel backend req %p", req, errtype, backend_req);
+	LOGE("evhtp frontend req %p error %hu, cancel backend req %p", req, errtype, backend_req);
 
     if (req->status == EVHTP_RES_PAUSE) {
         evhtp_request_resume(req); // paused connection cannot be freed automatically by socket EOF|error

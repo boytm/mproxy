@@ -227,7 +227,7 @@ static evhtp_res lru_conn_error(evhtp_connection_t * connection, evhtp_error_fla
 {
 	struct connection_item *bi = (struct connection_item *)arg;
 	assert (bi && bi->parent && bi->connection == connection);
-	LOGD("connection %p (bev %p %s:%d) hook error %hhu", connection, evhtp_connection_get_bev(connection),
+	LOGD("connection %p (bev %p %s:%d) hook error %hu", connection, evhtp_connection_get_bev(connection),
 			bi->parent->hostname, (int)bi->parent->port, errtype);
 	clear_item(bi, 1);
 
