@@ -37,9 +37,9 @@ install:
 - '"C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x64'
   # mbedTLS
 - cd \
-- appveyor DownloadFile https://tls.mbed.org/download/mbedtls-2.4.0-apache.tgz
-- 7z x mbedtls-2.4.0-apache.tgz -so | 7z x -si -ttar > nul
-- cd mbedtls-2.4.0
+- appveyor DownloadFile https://tls.mbed.org/download/mbedtls-2.4.2-apache.tgz
+- 7z x mbedtls-2.4.2-apache.tgz -so | 7z x -si -ttar > nul
+- cd mbedtls-2.4.2
 - mkdir lib
 - mkdir cmake-build
 - cd cmake-build
@@ -70,7 +70,7 @@ build_script:
 - set PATH=C:\Python27-x64\scripts;C:\Python27-x64;%PATH%
 - mkdir cmake-build
 - cd cmake-build
-- cmake -G "Visual Studio 14 2015 Win64" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-2.1.8-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-2.4.0 -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
+- cmake -G "Visual Studio 14 2015 Win64" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-2.1.8-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-2.4.2 -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
 - cmake --build . --config Release
 # TODO: 
 # - cpack
