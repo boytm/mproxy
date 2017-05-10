@@ -258,9 +258,7 @@ int socket_to_pipe(sock_relay_ctx *ctx, int fd, struct pipe *pipe, size_t *count
 
 			LOGD("splice read %d bytes from fd %d", rc, fd);
 
-            if (pipe->data > MAX_DATA_IN_PIPE) {
                 break;
-            }
         }
     }
 
@@ -299,6 +297,7 @@ int socket_from_pipe(sock_relay_ctx *ctx, int fd, struct pipe *pipe, size_t *cou
             retval += rc;
 
 			LOGD("splice write %d bytes to fd %d", rc, fd);
+            break;
         }
     }
 
