@@ -92,7 +92,11 @@ typedef struct {
 #endif
 
 typedef struct {
+#if defined(USE_CRYPTO_OPENSSL)
+    cipher_evp_t *evp;
+#else
     cipher_evp_t evp;
+#endif
 #ifdef USE_CRYPTO_APPLECC
     cipher_cc_t cc;
 #endif
@@ -106,35 +110,39 @@ typedef struct {
 
 #define BLOCK_SIZE 32
 
-#define CIPHER_NUM          27
 #define NONE                -1
-#define TABLE               0
-#define RC4                 1
-#define RC4_MD5             2
-#define AES_128_CFB         3
-#define AES_192_CFB         4
-#define AES_256_CFB         5
-#define BF_CFB              6
-#define CAMELLIA_128_CFB    7
-#define CAMELLIA_192_CFB    8
-#define CAMELLIA_256_CFB    9
-#define CAST5_CFB           10
-#define DES_CFB             11
-#define IDEA_CFB            12
-#define RC2_CFB             13
-#define SEED_CFB            14
-#define AES_128_OFB         15
-#define AES_192_OFB         16
-#define AES_256_OFB         17
-#define AES_128_CTR         18
-#define AES_192_CTR         19
-#define AES_256_CTR         20
-#define AES_128_CFB8        21
-#define AES_192_CFB8        22
-#define AES_256_CFB8        23
-#define AES_128_CFB1        24
-#define AES_192_CFB1        25
-#define AES_256_CFB1        26
+enum{
+    TABLE = 0,
+    RC4,
+    RC4_MD5,
+    AES_128_CFB,
+    AES_192_CFB,
+    AES_256_CFB,
+    BF_CFB,
+    CAMELLIA_128_CFB,
+    CAMELLIA_192_CFB,
+    CAMELLIA_256_CFB,
+    CAST5_CFB,
+    DES_CFB,
+    IDEA_CFB,
+    RC2_CFB,
+    SEED_CFB,
+    AES_128_OFB,
+    AES_192_OFB,
+    AES_256_OFB,
+    AES_128_CTR,
+    AES_192_CTR,
+    AES_256_CTR,
+    AES_128_CFB8,
+    AES_192_CFB8,
+    AES_256_CFB8,
+    AES_128_CFB1,
+    AES_192_CFB1,
+    AES_256_CFB1,
+    CHACHA20,
+    CIPHER_NUM,      /* must be last */
+};
+
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
