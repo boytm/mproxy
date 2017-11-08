@@ -3,9 +3,9 @@
 [![Appveyor Build status](https://ci.appveyor.com/api/projects/status/8jk67xy7xtr9ij2a?svg=true)](https://ci.appveyor.com/project/boytm/mproxy)
 
 
-mproxy is a multi mode http proxy. 
+mproxy is a multi mode http/https proxy. 
 
-1. as a normal http proxy 
+1. as a normal HTTP/HTTPS proxy 
 
 2. as a SOCKS5 proxy to HTTP proxy converter 
 
@@ -19,6 +19,7 @@ Based on a modified libevhtp library, the original version have some bugs when a
 
 Why HTTP proxy instead of SOCKSs proxy? Because some client only support HTTP proxy, for example IE9 only support 
 SOCKS4/HTTP proxy, and some version control system like subversion mercurial only support HTTP proxy.
+Currently HTTPS proxy is only supported by a few clients, eg. Chrome, Firefox 31+, curl 7.52.0+.
 
 # Installation #
 
@@ -61,6 +62,8 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
       --dns <ip[:port]>     name server, default port 53
       --user <user[:group]> set user and group
       --pid-file <path>     pid file
+      --ssl_certificate <fullchain.pem>   set ssl certificate
+      --ssl_certificate_key <privkey.pem> set ssl private key
       -V                    show version number and quit
       -h                    show help
     Supported encryption methods for shadowsocks:
@@ -74,13 +77,19 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
 
 ### Examples
 
-simple http proxy, listen 127.0.0.1:8081
+simple HTTP proxy, listen 127.0.0.1:8081
 
+    ./mproxy -b 127.0.0.1 -l8081
+  or
     ./mproxy -b ipv4:127.0.0.1 -l8081
 
-simple http proxy, listen IPv6 [::1]:8081
+simple HTTP proxy, listen IPv6 [::1]:8081
 
     ./mproxy -b ipv6:::1 -l8081
+
+HTTPS proxy, use certificate issued by Let's Encrypt, listen IPv6 [::1]:8081
+
+    ./mproxy -b ipv6:::1 -l8081 --ssl_certificate /etc/letsencrypt/live/your.domain/fullchain.pem --ssl_certificate_key /etc/letsencrypt/live/your.domain/privkey.pem
 
 convert local machine's SOCKS5 proxy at 127.0.0.1:1080 to HTTP proxy at 127.0.0.1:8087
 
