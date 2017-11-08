@@ -20,13 +20,17 @@ OPTION(ENABLE_SS "Enable shadowsocks protocol" ON)
 # -DUSE_CRYPTO_OPENSSL:STRING=ON
 OPTION(USE_CRYPTO_OPENSSL "Use OpenSSL crypt library" ON)
 OPTION(USE_CRYPTO_MBEDTLS "Use mbed TLS crypt library" OFF)
+# -DENABLE_HTTPS_PROXY:STRING=ON
+OPTION(ENABLE_HTTPS_PROXY "Enable https proxy" OFF)
 
 # add source files to DIR_SRCS
 aux_source_directory(. DIR_SRCS)
 
 # libevhtp subdir
 # add a variable of the same name to the cache, so options in subdirectory can be changed
-set(EVHTP_DISABLE_SSL ON CACHE BOOL "Disable ssl")
+if (NOT ENABLE_HTTPS_PROXY)
+    set(EVHTP_DISABLE_SSL ON CACHE BOOL "Disable ssl")
+endif()
 set(EVHTP_DISABLE_EVTHR ON CACHE BOOL "Disable thread")
 set(EVHTP_DISABLE_REGEX ON CACHE BOOL "Disable regex")
 add_subdirectory(libevhtp)
@@ -96,6 +100,7 @@ target_link_libraries(mproxy evhtp ${MPROXY_LIBS})
 
 message("")
 message(STATUS "${Blue}CMAKE_BUILD_TYPE${ColourReset}           : " ${BoldRed}${CMAKE_BUILD_TYPE}${ColourReset})
+message(STATUS "${Blue}ENABLE_HTTPS_PROXY${ColourReset}         : " ${BoldRed}${ENABLE_HTTPS_PROXY}${ColourReset})
 message(STATUS "${Blue}ENABLE_SS${ColourReset}                  : " ${BoldRed}${ENABLE_SS}${ColourReset})
 message(STATUS "${Blue}USE_CRYPTO_OPENSSL${ColourReset}         : " ${BoldRed}${USE_CRYPTO_OPENSSL}${ColourReset})
 message(STATUS "${Blue}USE_CRYPTO_MBEDTLS${ColourReset}         : " ${BoldRed}${USE_CRYPTO_MBEDTLS}${ColourReset})

@@ -29,6 +29,10 @@
 
 #include "connector.h"
 
+#ifndef EVHTP_DISABLE_SSL
+# define ENABLE_HTTPS_PROXY
+#endif
+
 #define PROGRAM_VERSION "0.4"
 #define MAX_OUTPUT (512*1024)
 #define DEFAULT_LISTEN_PORT 8081
@@ -50,6 +54,7 @@ struct evdns_base* evdns = NULL;
 #endif
 const char *g_socks_server = NULL;
 int g_socks_port = DEFAULT_SOCKS5_PORT;
+int g_https_proxy = 1;
 int use_syslog = 0;
 
 enum upstream_mode {
@@ -452,6 +457,10 @@ void usage(const char *program)
         "  --user <user[:group]> set user and group\n"
         "  --pid-file <path>     pid file\n"
 #endif
+#ifdef ENABLE_HTTPS_PROXY
+        "  --ssl_certificate <fullchain.pem>   set ssl certificate\n"
+        "  --ssl_certificate_key <privkey.pem> set ssl private key\n"
+#endif
         "  -v, --verbose         verbose logging\n"
         "  -V, --version         show version number and quit\n"
         "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
@@ -470,6 +479,8 @@ enum {
     OPTION_DNS,
     OPTION_USERSPEC,
     OPTION_PID_FILE,
+    OPTION_SSL_CERTIFICATE,
+    OPTION_SSL_CERTIFICATE_KEY,
 };
 
 int
@@ -485,6 +496,10 @@ main(int argc, char ** argv) {
     const char *userspec = NULL;
     const char *pid_file = NULL;
 #endif
+#ifdef ENABLE_HTTPS_PROXY
+    const char *ssl_certificate = NULL;
+    const char *ssl_certificate_key = NULL;
+#endif
     int verbose = 0;
 	int opt;
     int option_index = 0;
@@ -494,6 +509,10 @@ main(int argc, char ** argv) {
 #ifndef _WIN32
         {"user", required_argument, NULL, OPTION_USERSPEC},
         {"pid-file", required_argument, NULL, OPTION_PID_FILE},
+#endif
+#ifdef ENABLE_HTTPS_PROXY
+        {"ssl_certificate", required_argument, NULL, OPTION_SSL_CERTIFICATE},
+        {"ssl_certificate_key", required_argument, NULL, OPTION_SSL_CERTIFICATE_KEY},
 #endif
         {"help", no_argument, NULL, 'h'},
         {"verbose", no_argument, NULL, 'v'},
@@ -551,6 +570,14 @@ main(int argc, char ** argv) {
             pid_file = optarg;
             break;
 #endif
+#ifdef ENABLE_HTTPS_PROXY
+        case OPTION_SSL_CERTIFICATE:
+            ssl_certificate = optarg;
+            break;
+        case OPTION_SSL_CERTIFICATE_KEY:
+            ssl_certificate_key = optarg;
+            break;
+#endif
         case 'V':
             version(argv[0]);
             exit(EXIT_SUCCESS);
@@ -596,7 +623,23 @@ main(int argc, char ** argv) {
 
     evdns_base_set_option(evdns, "randomize-case:", "0");
 
-	evhtp = evhtp_new(evbase, NULL);
+    evhtp = evhtp_new(evbase, NULL);
+
+
+#ifdef ENABLE_HTTPS_PROXY
+    evhtp_ssl_cfg_t ssl_cfg = {};
+    if (ssl_certificate) {
+        g_https_proxy = 1;
+        ssl_cfg.pemfile = ssl_certificate;
+        ssl_cfg.privfile = ssl_certificate_key;
+        //ssl_cfg.cafile = "/etc/ssl/certs/ca-bundle.crt"; // RHEL 7
+        //ssl_cfg.capath = "/etc/ssl/certs/"; // Ubuntu 16.04
+        if (0 != evhtp_ssl_init(evhtp, &ssl_cfg)) {
+            LOGE("Init SSL failed");
+            return EXIT_FAILURE;
+        }
+    }
+#endif
 
 #ifdef USE_THREAD
     evhtp_set_gencb(evhtp, frontend_cb, NULL);
@@ -647,4 +690,5 @@ main(int argc, char ** argv) {
     LOGD("Clean exit");
     return 0;
 }
+
 

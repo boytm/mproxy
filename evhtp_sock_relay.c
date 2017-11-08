@@ -35,6 +35,8 @@
 
 #define MAX_OUTPUT (512*1024)
 
+extern int g_https_proxy;
+
 static void drained_writecb(struct bufferevent *bev, void *ctx);
 static void eventcb(struct bufferevent *bev, short what, void *ctx);
 
@@ -417,7 +419,7 @@ relay(struct bufferevent *local, struct bufferevent *remote)
 {
     LOGD("relay bev %p <--> %p", local, remote);
 #ifdef HAVE_SPLICE
-    if (use_splice && bufferevent_get_underlying(local) == NULL && bufferevent_get_underlying(remote) == NULL) {
+    if (use_splice && !g_https_proxy && bufferevent_get_underlying(remote) == NULL) {
         sock_relay_ctx *conn = calloc(sizeof(sock_relay_ctx), 1);
         assert(conn);
 
