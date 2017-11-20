@@ -4,6 +4,28 @@ compiler:
   - clang
   - gcc
 
+env:
+  # build without shadowsocks protocol
+  - ENABLE_SS: OFF
+    USE_CRYPTO_OPENSSL: OFF
+    USE_CRYPTO_MBEDTLS: OFF
+
+  # build with openssl library
+  - ENABLE_SS: ON
+    USE_CRYPTO_OPENSSL: ON
+    USE_CRYPTO_MBEDTLS: OFF
+
+  # build with mbed TLS library
+  #- ENABLE_SS: ON
+  #  USE_CRYPTO_OPENSSL: OFF
+  #  USE_CRYPTO_MBEDTLS: ON
+
+  # build https proxy with openssl library
+  - ENABLE_SS: ON
+    ENABLE_HTTPS_PROXY: ON
+    USE_CRYPTO_OPENSSL: ON
+    USE_CRYPTO_MBEDTLS: OFF
+
 sudo: false
 
 branches:
@@ -22,8 +44,8 @@ addons:
       - libevent-dev
 
 script:
+  - mkdir -p build && cd build && cmake .. -DENABLE_HTTPS_PROXY:STRING=$ENABLE_HTTPS_PROXY -DENABLE_SS:STRING=$ENABLE_SS -DUSE_CRYPTO_OPENSSL:STRING=$USE_CRYPTO_OPENSSL && make
   - scons
-  - mkdir -p build && cd build && cmake .. -DENABLE_HTTPS_PROXY:STRING=ON -DENABLE_SS:STRING=ON -DUSE_CRYPTO_OPENSSL:STRING=ON && make
 
 notifications:
   recipients:
