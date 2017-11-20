@@ -389,7 +389,7 @@ fail:
 static void response_proxy_pac_file(evhtp_request_t * frontend_req)
 {
     LOGD("response proxy.pac to client");
-    if (g_proxy_pac_length) {
+    if (g_proxy_pac_length && 0 == strcmp(frontend_req->uri->path->full, "/proxy.pac")) {
         evhtp_headers_add_header(frontend_req->headers_out,
                 evhtp_header_new("Content-Type", "application/x-ns-proxy-autoconfig", 0, 0));
         evbuffer_add_reference(frontend_req->buffer_out, g_proxy_pac_content, g_proxy_pac_length, NULL, NULL);
@@ -600,11 +600,11 @@ main(int argc, char ** argv) {
 		g_ss_server = g_socks_server;
 		g_ss_port = g_socks_port;
 
-        if (g_proxy_pac_path && g_proxy_pac_path[0]) {
-            load_proxy_pac_file(g_proxy_pac_path);
-        }
 	}
 #endif
+     if (g_proxy_pac_path && g_proxy_pac_path[0]) {
+         load_proxy_pac_file(g_proxy_pac_path);
+     }
 
 	evbase  = event_base_new();
     if (name_server) {
