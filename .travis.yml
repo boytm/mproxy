@@ -44,8 +44,8 @@ addons:
       - libevent-dev
 
 script:
+  - scons && scons --clean
   - mkdir -p build && cd build && cmake .. -DENABLE_HTTPS_PROXY:STRING=$ENABLE_HTTPS_PROXY -DENABLE_SS:STRING=$ENABLE_SS -DUSE_CRYPTO_OPENSSL:STRING=$USE_CRYPTO_OPENSSL && make
-  - scons
 
 notifications:
   recipients:
