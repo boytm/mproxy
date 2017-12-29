@@ -26,7 +26,8 @@ env:
     USE_CRYPTO_OPENSSL: ON
     USE_CRYPTO_MBEDTLS: OFF
 
-sudo: false
+sudo: required 
+dist: trusty
 
 branches:
   except:
@@ -44,7 +45,7 @@ addons:
       - libevent-dev
 
 install:
-  - test "$USE_CRYPTO_MBEDTLS" = true && wget https://tls.mbed.org/download/mbedtls-2.1.9-gpl.tgz && tar -xf mbedtls-2.1.9-gpl.tgz && cd mbedtls-2.1.9 && make install && cd -
+  - test "$USE_CRYPTO_MBEDTLS" != true || ( wget https://tls.mbed.org/download/mbedtls-2.1.9-gpl.tgz && tar -xf mbedtls-2.1.9-gpl.tgz && cd mbedtls-2.1.9 && make && sudo make install && cd - )
 
 script:
   - scons && scons --clean
