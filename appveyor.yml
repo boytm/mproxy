@@ -17,22 +17,25 @@ environment:
     - ENABLE_SS: OFF
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: OFF
+      BUILD_SUFFIX: "vc2015_x64"
 
     # build with openssl library
     - ENABLE_SS: ON
       USE_CRYPTO_OPENSSL: ON
       USE_CRYPTO_MBEDTLS: OFF
+      BUILD_SUFFIX: "openssl_vc2015_x64"
 
     # build with mbed TLS library
     - ENABLE_SS: ON
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: ON
+      BUILD_SUFFIX: "mbedtls_vc2015.x64"
 
     # build https proxy with openssl library
-    - ENABLE_SS: ON
-      ENABLE_HTTPS_PROXY: ON
-      USE_CRYPTO_OPENSSL: ON
-      USE_CRYPTO_MBEDTLS: OFF
+    #- ENABLE_SS: ON
+    #  ENABLE_HTTPS_PROXY: ON
+    #  USE_CRYPTO_OPENSSL: ON
+    #  USE_CRYPTO_MBEDTLS: OFF
 
 install:
 - ECHO "Filesystem root:"
@@ -84,4 +87,17 @@ build_script:
 
 artifacts:
 - path: cmake-build\Release
-  name: mproxy_x64
+  name: mproxy_$(BUILD_SUFFIX)
+
+deploy:
+  release: mproxy_v$(appveyor_build_version)
+  description: 'Release description'
+  provider: GitHub
+  auth_token:
+    secure: wFxle0z6fJTg0aVgEyl46GbOPGvVb/WvnNmmO5ifTaBQx5Q3qlhlfwwIpuABfuty 
+  artifact: /mproxy_.*_x64/
+  draft: false
+  prerelease: false
+  on:
+    branch: master                 # release from master branch only
+
