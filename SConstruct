@@ -70,8 +70,8 @@ if env['PLATFORM'] in ('win32', 'mingw'):
 
 env.Decider('timestamp-match')
 
-# TODO: env['CPPDEFINES'] change, should generate a new config.h
-env.Command('$EVHTP_DIR/evhtp-config.h', '$EVHTP_DIR/evhtp-config.h.in', config_h_build)
+config_h_action = Action(config_h_build, varlist=['CPPDEFINES'])
+env.Command('$EVHTP_DIR/evhtp-config.h', '$EVHTP_DIR/evhtp-config.h.in', config_h_action)
 env.Append(CPPPATH = ['libevhtp', 'libevhtp/compat'])
 libevhtp_srcs = Split('libevhtp/evhtp.c libevhtp/evhtp_numtoa.c libevhtp/evthr.c libevhtp/htparse.c')
 libevhtp_objs = [env.Object(i) for i in libevhtp_srcs]
