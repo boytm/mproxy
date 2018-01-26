@@ -129,6 +129,7 @@ static struct {
     {"aes-128-cfb1",      16,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     {"aes-192-cfb1",      24,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     {"aes-256-cfb1",      32,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"chacha20",          32,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
 };
 
 #undef _
@@ -463,7 +464,22 @@ const cipher_kt_t *get_cipher_type(int method)
 
     const char *ciphername = supported_ciphers[method].name;
 #if defined(USE_CRYPTO_OPENSSL)
-    return EVP_get_cipherbyname(ciphername);
+    const cipher_kt_t *cipher = EVP_get_cipherbyname(ciphername);
+    if (cipher == NULL) {
+        LOGE("Cipher %s not found in OpenSSL library", ciphername);
+        return cipher;
+    }
+
+    if (EVP_CIPHER_iv_length(cipher) != supported_ciphers[method].iv_size) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        assert(EVP_CIPHER_flags(cipher) & EVP_CIPH_CUSTOM_IV);
+        cipher = EVP_CIPHER_meth_dup(cipher);
+        EVP_CIPHER_meth_set_iv_length(cipher, supported_ciphers[method].iv_size);
+#else
+        FATAL("Cipher iv length mismatch");
+#endif
+    }
+    return cipher;
 #elif defined(USE_CRYPTO_MBEDTLS)
     const char *mbedname = supported_ciphers[method].cipher_mbedtls;
     if (strcmp(mbedname, CIPHER_UNSUPPORTED) == 0) {
@@ -516,12 +532,16 @@ void cipher_context_init(cipher_ctx_t *ctx, int method, int enc)
     }
 #endif
 
-    cipher_evp_t *evp = &ctx->evp;
     const cipher_kt_t *cipher = supported_ciphers[method].cipher;
 #if defined(USE_CRYPTO_OPENSSL)
     if (cipher == NULL) {
         LOGE("Cipher %s not found in OpenSSL library", ciphername);
         FATAL("Cannot initialize cipher");
+    }
+
+    cipher_evp_t *evp = EVP_CIPHER_CTX_new();
+    if (evp == NULL) {
+        FATAL("Cannot create cipher context");
     }
     EVP_CIPHER_CTX_init(evp);
     if (!EVP_CipherInit_ex(evp, cipher, NULL, NULL, NULL, enc)) {
@@ -529,14 +549,16 @@ void cipher_context_init(cipher_ctx_t *ctx, int method, int enc)
         exit(EXIT_FAILURE);
     }
     if (!EVP_CIPHER_CTX_set_key_length(evp, enc_key_len)) {
-        EVP_CIPHER_CTX_cleanup(evp);
+        EVP_CIPHER_CTX_free(evp);
         LOGE("Invalid key length: %d", enc_key_len);
         exit(EXIT_FAILURE);
     }
     if (method > RC4_MD5) {
         EVP_CIPHER_CTX_set_padding(evp, 1);
     }
+    ctx->evp = evp;
 #elif defined(USE_CRYPTO_MBEDTLS)
+    cipher_evp_t *evp = &ctx->evp;
     if (cipher == NULL) {
         LOGE("Cipher %s not found in mbed TLS library", ciphername);
         FATAL("Cannot initialize mbed TLS cipher");
@@ -601,17 +623,18 @@ void cipher_context_set_iv(cipher_ctx_t *ctx, uint8_t *iv, size_t iv_len,
     }
 #endif
 
-    cipher_evp_t *evp = &ctx->evp;
+#if defined(USE_CRYPTO_OPENSSL)
+    cipher_evp_t *evp = ctx->evp;
     if (evp == NULL) {
         LOGE("cipher_context_set_iv(): Cipher context is null");
         return;
     }
-#if defined(USE_CRYPTO_OPENSSL)
     if (!EVP_CipherInit_ex(evp, NULL, NULL, true_key, iv, enc)) {
-        EVP_CIPHER_CTX_cleanup(evp);
+        EVP_CIPHER_CTX_free(evp);
         FATAL("Cannot set key and IV");
     }
 #elif defined(USE_CRYPTO_MBEDTLS)
+    cipher_evp_t *evp = &ctx->evp;
     if (mbedtls_cipher_setkey(evp, true_key, enc_key_len * 8, enc) != 0) {
         mbedtls_cipher_free(evp);
         FATAL("Cannot set mbed TLS cipher key");
@@ -651,10 +674,11 @@ void cipher_context_release(cipher_ctx_t *ctx)
     }
 #endif
 
-    cipher_evp_t *evp = &ctx->evp;
 #if defined(USE_CRYPTO_OPENSSL)
-    EVP_CIPHER_CTX_cleanup(evp);
+    cipher_evp_t *evp = ctx->evp;
+    EVP_CIPHER_CTX_free(evp);
 #elif defined(USE_CRYPTO_MBEDTLS)
+    cipher_evp_t *evp = &ctx->evp;
     mbedtls_cipher_free(evp);
 #endif
 }
@@ -671,11 +695,13 @@ static int cipher_context_update(cipher_ctx_t *ctx, uint8_t *output, int *olen,
         return (ret == kCCSuccess) ? 1 : 0;
     }
 #endif
-    cipher_evp_t *evp = &ctx->evp;
+
 #if defined(USE_CRYPTO_OPENSSL)
+    cipher_evp_t *evp = ctx->evp;
     return EVP_CipherUpdate(evp, (uint8_t *)output, olen,
                             (const uint8_t *)input, (size_t)ilen);
 #elif defined(USE_CRYPTO_MBEDTLS)
+    cipher_evp_t *evp = &ctx->evp;
     return !mbedtls_cipher_update(evp, (const uint8_t *)input, (size_t)ilen,
                           (uint8_t *)output, (size_t *)olen);
 #endif
