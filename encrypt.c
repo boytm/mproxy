@@ -471,7 +471,7 @@ const cipher_kt_t *get_cipher_type(int method)
     }
 
     if (EVP_CIPHER_iv_length(cipher) != supported_ciphers[method].iv_size) {
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
         assert(EVP_CIPHER_flags(cipher) & EVP_CIPH_CUSTOM_IV);
         cipher = EVP_CIPHER_meth_dup(cipher);
         EVP_CIPHER_meth_set_iv_length(cipher, supported_ciphers[method].iv_size);

@@ -2,6 +2,7 @@
 [![Build Status](https://travis-ci.org/boytm/mproxy.svg?branch=master)](https://travis-ci.org/boytm/mproxy)
 [![Appveyor Build status](https://ci.appveyor.com/api/projects/status/8jk67xy7xtr9ij2a?svg=true)](https://ci.appveyor.com/project/boytm/mproxy)
 
+[中文使用帮助](https://github.com/boytm/mproxy/wiki)
 
 mproxy is a multi mode http/https proxy. 
 
@@ -39,10 +40,10 @@ Linux require _cmake_ or _scons_.
 open the _proxy.vcxproj_ directly, set your libevent and openssl directories then compile
 
 #### Linux
-* enable all protocol
->cmake . && make          
+* CMake, enable all protocol
+>cmake . -DENABLE_HTTPS_PROXY:STRING=ON -DENABLE_SS:STRING=ON -DCMAKE_BUILD_TYPE=Release && make          
 
-* disable shadowsocks protocol
+* CMake, disable shadowsocks protocol
 >cmake . -DENABLE_SS:STRING=OFF && make     
 
 # Usage #
