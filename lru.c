@@ -1,12 +1,14 @@
 #include <assert.h>
 #include <time.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/queue.h>
-#include <sys/tree.h>
 #include <event2/bufferevent.h>
 
+#define RB_COMPACT
+#include "rb.h"
 #include "evhtp.h"
 #include "connector.h"
 
@@ -35,12 +37,12 @@ struct connection_item
 
 struct tree_item 
 {
-	char hostname[256];
-	int port;
-
 	TAILQ_HEAD(, connection_item) free_list;
 
-	RB_ENTRY(tree_item) field;
+	rb_node(struct tree_item) field;
+
+	int port;
+	char hostname[256];
 };
 
 TAILQ_HEAD(queue, connection_item);
@@ -54,13 +56,13 @@ static int TreeItemCompare(const struct tree_item *lhs, const struct tree_item *
 	}
 }
 
-RB_HEAD(lru_tree, tree_item);
-RB_GENERATE(lru_tree, tree_item, field, TreeItemCompare);
+typedef rb_tree(struct tree_item) lru_tree;
+rb_gen(static, lru_tree_, lru_tree, struct tree_item, field, TreeItemCompare);
 
 struct lru_base
 {
     struct queue queue;
-    struct lru_tree tree_head;
+    lru_tree tree_head;
     struct event_base *evbase;
     struct event *timer_ev;
 };
@@ -76,7 +78,7 @@ evhtp_connection_t * cache_get(const char *hostname, int port)
 	strcpy(item.hostname, hostname);
 	item.port = port;
 
-	ti = RB_FIND(lru_tree, &lru->tree_head, &item);
+	ti = lru_tree_search(&lru->tree_head, &item);
 	if (ti) {
 		struct connection_item *bi = TAILQ_FIRST(&ti->free_list);
 		if (bi) {
@@ -84,8 +86,7 @@ evhtp_connection_t * cache_get(const char *hostname, int port)
 			LOGD("LRU get connection %p %s:%d, last %d", bi->connection, hostname, (int)port, (int)bi->last_use);
 			TAILQ_REMOVE(&ti->free_list, bi, tree_list_field); // remove from tree
 			if (TAILQ_EMPTY(&ti->free_list)) {
-                ti = RB_REMOVE(lru_tree, &lru->tree_head, ti); // list empty then erase tree item
-				assert(ti);
+                lru_tree_remove(&lru->tree_head, ti); // list empty then erase tree item
 				free(ti);
 			}
 
@@ -108,7 +109,7 @@ void cache_put(const char *hostname, int port, evhtp_connection_t *conn)
 	strcpy(item.hostname, hostname);
 	item.port = port;
 
-    ti = RB_FIND(lru_tree, &lru->tree_head, &item);
+    ti = lru_tree_search(&lru->tree_head, &item);
 	if (ti == NULL) {
 		ti = (struct tree_item *)calloc(1, sizeof(*ti));
 		assert(ti);
@@ -116,7 +117,7 @@ void cache_put(const char *hostname, int port, evhtp_connection_t *conn)
 		strcpy(ti->hostname, hostname);
 		ti->port = port;
 
-        if (RB_INSERT(lru_tree, &lru->tree_head, ti)) {
+        if (lru_tree_insert(&lru->tree_head, ti)) {
 			assert(0);
 		}
 	}
@@ -165,10 +166,9 @@ static void clear_item(struct connection_item *bi, int error)
 
 	if (TAILQ_EMPTY(&bi->parent->free_list)) {
 		// empty tree item
-		struct tree_item *ti;
-        ti = RB_REMOVE(lru_tree, &lru->tree_head, bi->parent);
-		assert(ti && ti == bi->parent);
-		free(ti);
+        lru_tree_remove(&lru->tree_head, bi->parent);
+		free(bi->parent);
+		bi->parent = NULL;
 	}
 
     TAILQ_REMOVE(&lru->queue, bi, queue_field); // remove from queue
@@ -241,7 +241,7 @@ int lru_init(evbase_t *base)
 	    goto fail;
     }
     TAILQ_INIT(&lru->queue);
-    RB_INIT(&lru->tree_head);
+    lru_tree_new(&lru->tree_head);
 
     lru->evbase = base;
     lru->timer_ev = event_new(base, -1, 0, timercb, base);
