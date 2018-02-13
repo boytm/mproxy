@@ -111,6 +111,9 @@ frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
     if (req->status == EVHTP_RES_PAUSE) {
         evhtp_request_resume(req); // paused connection cannot be freed automatically by socket EOF|error
     }
+    if (backend_req->status == EVHTP_RES_PAUSE) {
+        evhtp_request_resume(backend_req); // paused connection cannot be freed automatically by socket EOF|error
+    }
 
 	// cancel request
 	evhtp_unset_hook(&backend_req->hooks, evhtp_hook_on_error);
@@ -118,17 +121,17 @@ frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 	evhtp_connection_free(ev_conn);
 }
 
-/*static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg) 
+static evhtp_res resume_backend_request(evhtp_connection_t * conn, void * arg) 
 {
 	evhtp_request_t * backend_req = (evhtp_request_t *)arg;
 
-	LOGD("resume backend request");
-	evhtp_request_resume(backend_req); // bug, client can't evhtp_request_resume
+	LOGD("resume backend request %p", backend_req);
+	evhtp_request_resume(backend_req);
 
 	evhtp_unset_hook(&conn->hooks, evhtp_hook_on_write);
 	
 	return EVHTP_RES_OK;
-}*/
+}
 
 
 static evhtp_res
@@ -144,12 +147,12 @@ backend_body(evhtp_request_t * req, evbuf_t * buf, void * arg)
 	
 	//evbuffer_drain(buf, -1); // remove readed data
 
-// 	if(evbuffer_get_length(bufferevent_get_output(evhtp_request_get_bev(frontend_req))) > MAX_OUTPUT) {
-// 		printf("too many data, stop backend request\n");
-// 		evhtp_request_pause(req);
-// 
-// 		evhtp_set_hook(&evhtp_request_get_connection(frontend_req)->hooks, evhtp_hook_on_write, resume_backend_request, req);
-// 	}
+ 	if (evbuffer_get_length(bufferevent_get_output(evhtp_request_get_bev(frontend_req))) > MAX_OUTPUT) {
+ 		LOGD("too many data, stop backend request %p", req);
+ 		evhtp_request_pause(req);
+ 
+ 		evhtp_set_hook(&evhtp_request_get_connection(frontend_req)->hooks, evhtp_hook_on_write, resume_backend_request, req);
+ 	}
 
 	return EVHTP_RES_OK;
 }
