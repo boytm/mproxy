@@ -295,14 +295,23 @@ void connect_socks5(struct event_base *evbase, struct evdns_base *evdns_base, co
         LOGE("bufferevent create failed");
 		goto fail;
 	}
+
+	// eventcb() might be called in bufferevent_socket_connect_hostname(), when name resolve is done 
+	// immediately and bufferevent_socket_connect() failed immediately.
+	// When hostname is pure IP address, or hostname is in /etc/hosts file, evutil_getaddrinfo_async() call its 
+	// callback in itself, not after.
+	// bufferevent_socket_connect() usually failed immediately with socket() exceed ulimit open files.
+	conn->client = bev;
+	bufferevent_setcb(bev, readcb, NULL, eventcb, conn); /* must be set before bufferevent_socket_connect_hostname() */
+
 	if (bufferevent_socket_connect_hostname(bev, evdns_base, PF_UNSPEC, hostname, port) < 0) {
         LOGE("bufferevent connect %s:%d failed", hostname, port);
 		goto fail;
 	}
 
-	bufferevent_setcb(bev, readcb, NULL, eventcb, conn);
+	// Because eventcb() might have been called, so we cannot do anything with bev or conn here.
+	// If you want, you must use BEV_OPT_DEFER_CALLBACKS to force eventcb() executed after bufferevent_socket_connect_hostname().
 
-	conn->client = bev;
 	return;
 
 fail:

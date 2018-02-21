@@ -209,24 +209,24 @@ void connect_ss(struct event_base *evbase, struct evdns_base *evdns_base, const 
 	conn->cb = cb;
 	conn->arg = arg;
 
-	//if (g_socks_server && g_socks_port != 0) {
-		hostname = g_ss_server;
-		port =g_ss_port;
-
-		//conn->status = SCONN_INIT;
-	//}
+	assert(g_ss_server && g_ss_port != 0);
+	hostname = g_ss_server;
+	port =g_ss_port;
 
 	bev = bufferevent_socket_new(evbase, -1, BEV_OPT_CLOSE_ON_FREE/*|BEV_OPT_DEFER_CALLBACKS*/);
 	if (NULL == bev) {
+		LOGE("bufferevent create failed");
 		goto fail;
 	}
-	if (bufferevent_socket_connect_hostname(bev, evdns_base, PF_UNSPEC, hostname, port) < 0) {
-		goto fail;
-	}
-
-	bufferevent_setcb(bev, NULL, NULL, ss_eventcb, conn);
 
 	conn->client = bev;
+	bufferevent_setcb(bev, NULL, NULL, ss_eventcb, conn);
+
+	if (bufferevent_socket_connect_hostname(bev, evdns_base, PF_UNSPEC, hostname, port) < 0) {
+        LOGE("bufferevent connect ss server %s:%d failed", hostname, port);
+		goto fail;
+	}
+
 	return;
 
 fail:
