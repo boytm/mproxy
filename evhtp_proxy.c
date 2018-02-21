@@ -33,7 +33,7 @@
 # define ENABLE_HTTPS_PROXY
 #endif
 
-#define PROGRAM_VERSION "0.4"
+#define PROGRAM_VERSION "0.5"
 #define MAX_OUTPUT (512*1024)
 #define DEFAULT_LISTEN_PORT 8081
 #define DEFAULT_BIND_ADDRESS "0.0.0.0"
@@ -284,7 +284,7 @@ frontend_cb(evhtp_request_t * req, void * arg) {
 
     const char *host = req->uri->authority->hostname; 
     uint16_t port = req->uri->authority->port ? req->uri->authority->port : 80;
-    LOGD("frontend req %p receive HTTP request for %s:%u", req, host, port);
+    LOGD("frontend req %p (connection %p) receive HTTP request for %s:%u", req, req->conn, host, port);
 
     if (host == NULL) {
         // non proxy request, so return proxy.pac file
@@ -332,6 +332,7 @@ void connect_cb(struct bufferevent *bev, void *arg)
 void lru_get_cb(evhtp_connection_t *conn, void *arg)
 {
 	evhtp_request_t * req = (evhtp_request_t *)arg;
+	LOGD("lru get backend connection %p for frontend req %p", conn, req);
 
 	if (NULL == conn)
 	{
@@ -686,6 +687,7 @@ main(int argc, char ** argv) {
     event_free(ev_sigterm);
 #endif
 
+    evhtp_unbind_socket(evhtp);
     lru_fini();
     evdns_base_free(evdns, 1);
     evhtp_free(evhtp);
