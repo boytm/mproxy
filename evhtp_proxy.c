@@ -118,6 +118,7 @@ frontend_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 	// cancel request
 	evhtp_unset_hook(&backend_req->hooks, evhtp_hook_on_error);
 	evhtp_connection_t *ev_conn = evhtp_request_get_connection(backend_req);
+	LOGE("evhtp free backend connection %p backend req %p", ev_conn, backend_req);
 	evhtp_connection_free(ev_conn);
 }
 
@@ -642,6 +643,7 @@ main(int argc, char ** argv) {
             LOGE("Init SSL failed");
             return EXIT_FAILURE;
         }
+	evhtp->bev_flags |= BEV_OPT_DEFER_CALLBACKS;
     }
 #endif
 
