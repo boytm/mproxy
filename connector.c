@@ -227,12 +227,14 @@ static void readcb(struct bufferevent *bev, void *ctx)
 	}
 
 	if (conn->status == SCONN_CONNECT_TRANSMITTING)	{
+        LOGD("SOCKS5 negotiate successfully");
 		bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
 
 		conn->cb(bev, conn->arg);
 
 		free(conn);
 	} else if (conn->status == SCONN_ERROR)	{
+        LOGE("SOCKS5 encounter unknown response during negotiate");
 		// error
 		conn->cb(NULL, conn->arg);
 
@@ -245,8 +247,9 @@ static void eventcb(struct bufferevent *bev, short what, void *ctx)
 {
 	socks5_conn *conn = (socks5_conn*)ctx;
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
+        char buf[4096] = {'\0'};
 		// during handshake, EOF is an error also
-		LOGE("bev %p (sock %d) event: %hd", bev, bufferevent_getfd(bev), what);
+		LOGE("bev %p (sock %d) event: 0x%hx %s", bev, bufferevent_getfd(bev), what, socket_error(buf, sizeof(buf)));
 
 		// error
 		conn->cb(NULL, conn->arg);

@@ -6,7 +6,7 @@
  *        */
 
 #ifdef HAVE_SPLICE
-#define _GNU_SOURCE
+#define _GNU_SOURCE 1
 #endif
 #include <stdio.h>
 #include <assert.h>
@@ -30,15 +30,36 @@
 #include <event2/listener.h>
 #include <event2/util.h>
 
+#include "connector.h"
 #include "utils.h"
 
 
-#define MAX_OUTPUT (512*1024)
-
-extern int g_https_proxy;
-
 static void drained_writecb(struct bufferevent *bev, void *ctx);
 static void eventcb(struct bufferevent *bev, short what, void *ctx);
+
+const char* socket_error(char *buf, int len)
+{
+#ifdef _WIN32
+    if (FormatMessage(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL, WSAGetLastError(),
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        buf, len, NULL)) {
+        return buf;
+    }
+#elif defined(HAVE_STRERROR_R)
+#if (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && ! _GNU_SOURCE
+    if (0 == strerror_r(errno, buf, len)) {
+        return buf;
+    }
+# else
+    return strerror_r(errno, buf, len);
+# endif
+#else
+    return strerror(errno);
+#endif
+    return "";
+}
 
 static void
 readcb(struct bufferevent *bev, void *ctx)
@@ -96,11 +117,12 @@ eventcb(struct bufferevent *bev, short what, void *ctx)
 	struct bufferevent *partner = ctx;
 
 	if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
+        char buf[4096] = {'\0'};
 		if (what & BEV_EVENT_ERROR) {
-			LOGE("bev %p (sock %d) event: %hd, errno: %s", bev, bufferevent_getfd(bev), 
-					what, (errno ? strerror(errno) : ""));
+			LOGE("bev %p (sock %d) event: 0x%hx, errno: %s", bev, bufferevent_getfd(bev), 
+					what, socket_error(buf, sizeof(buf)));
 		} else {
-			LOGD("bev %p (sock %d) event: %hd", bev, bufferevent_getfd(bev), what);
+			LOGD("bev %p (sock %d) event: 0x%hx", bev, bufferevent_getfd(bev), what);
 		}
 
 		if (partner) {

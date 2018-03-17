@@ -4,7 +4,13 @@
 #include "evhtp.h"
 #include "utils.h"
 
+#define MAX_OUTPUT (512*1024)
+
 extern struct evdns_base *evdns;
+
+const char* socket_error(char *buf, int len);
+
+extern int g_https_proxy;
 
 typedef void (*connect_callback)(struct bufferevent *bev, void *arg);
 void connect_upstream(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg);

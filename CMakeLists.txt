@@ -45,6 +45,11 @@ elseif (NOT APPLE)
     set(MPROXY_LIBS ${MPROXY_LIBS} ${LIB_RT})
 endif()
 
+CHECK_FUNCTION_EXISTS(strerror_r HAVE_STRERROR_R)
+if (HAVE_STRERROR_R)
+    add_definitions(-DHAVE_STRERROR_R=1)
+endif()
+
 CHECK_FUNCTION_EXISTS(splice HAVE_SPLICE)
 if (HAVE_SPLICE)
     add_definitions(-DHAVE_SPLICE=1)

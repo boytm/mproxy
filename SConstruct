@@ -27,7 +27,7 @@ def config_h_build(target, source, env):
 
 #env = Environment(CCFLAGS = '-g -O0 -Wall')
 env = Environment(CCFLAGS = '-g -O2 -Wall')
-#env['CPPDEFINES'] = []
+#env['CPPDEFINES'] = ['EVHTP_DEBUG=1']
 #env['CPPFLAGS'] = 
 #env['CPPPATH'] = []
 #env['LIBPATH'] = []
@@ -53,6 +53,8 @@ if not env.GetOption('clean'):
         conf.env.Append(CPPDEFINES = ['NO_STRNLEN'])
     if conf.CheckHeader('openssl/evp.h'):
         conf.env.Append(CPPDEFINES = ['USE_CRYPTO_OPENSSL', 'ENABLE_SS'])
+    if conf.CheckFunc('strerror_r'):
+        conf.env.Append(CPPDEFINES = ['HAVE_STRERROR_R'])
     if conf.CheckFunc('splice'):
         conf.env.Append(CPPDEFINES = ['HAVE_SPLICE'])
     if not conf.CheckLib('event_openssl'):

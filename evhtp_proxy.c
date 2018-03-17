@@ -34,7 +34,6 @@
 #endif
 
 #define PROGRAM_VERSION "0.5"
-#define MAX_OUTPUT (512*1024)
 #define DEFAULT_LISTEN_PORT 8081
 #define DEFAULT_BIND_ADDRESS "0.0.0.0"
 #define DEFAULT_SOCKS5_PORT 1080
@@ -54,7 +53,7 @@ struct evdns_base* evdns = NULL;
 #endif
 const char *g_socks_server = NULL;
 int g_socks_port = DEFAULT_SOCKS5_PORT;
-int g_https_proxy = 1;
+int g_https_proxy = 0;
 int use_syslog = 0;
 
 enum upstream_mode {
@@ -63,6 +62,24 @@ enum upstream_mode {
 	UPSTREAM_SS,
 };
 enum upstream_mode g_upstream_mode = UPSTREAM_TCP; // 0. TCP 1. SOCKS5 2. shadowsocks
+
+static const char* upstream_mode_to_str(enum upstream_mode mode)
+{
+    switch (mode)
+    {
+    case UPSTREAM_TCP:
+        return "TCP";
+
+    case UPSTREAM_SOCKS5:
+        return "SOCKS5";
+
+    case UPSTREAM_SS:
+        return "SS";
+
+    default:
+        return "Unknown";
+    }
+}
 
 void connect_upstream(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg)
 {
@@ -492,7 +509,7 @@ int
 main(int argc, char ** argv) {
     evbase_t     *evbase = NULL;
     evhtp_t      *evhtp = NULL;
-	int			  port = DEFAULT_LISTEN_PORT; // default listen port
+	uint16_t	  port = DEFAULT_LISTEN_PORT; // default listen port
 	const char *bind_address = DEFAULT_BIND_ADDRESS;
 	const char *password = NULL;
 	const char *method = NULL;
@@ -542,6 +559,7 @@ main(int argc, char ** argv) {
 		{
 		case 's':
 			g_socks_server = optarg;
+			g_upstream_mode = UPSTREAM_SOCKS5 ;
 			break;
 		case 'p':
 			g_socks_port = atoi(optarg);
@@ -666,10 +684,12 @@ main(int argc, char ** argv) {
     evsignal_add(ev_sigint, NULL);
 
     if (0 != evhtp_bind_socket(evhtp, bind_address, port, 1024)) {
-		LOGE("Bind address %s failed", bind_address);
+		LOGE("Bind address %s:%hu failed", bind_address, port);
         return EXIT_FAILURE;
     }
-    LOGI("listen at %s:%hu", bind_address, port);
+    LOGI("%s listen at %s:%hu, upstream protocol %s", (g_https_proxy ? "HTTPS" : "HTTP"), 
+            bind_address, port,
+            upstream_mode_to_str(g_upstream_mode));
 
 #ifndef _WIN32
     if (pid_file && 0 != write_pid_file(pid_file)) {
