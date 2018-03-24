@@ -5,8 +5,8 @@
 clone_depth: 10
 
 version: '{build}'
-os:
-- Visual Studio 2015
+image:
+  - Visual Studio 2017
 
 environment:
   BOOST_ROOT: C:\Libraries\boost_1_59_0
@@ -17,19 +17,22 @@ environment:
     - ENABLE_SS: OFF
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: OFF
-      BUILD_SUFFIX: "vc2015_x64"
+      BUILD_SUFFIX: "vc2017_x64"
+      ARCH: 64
 
     # build with openssl library
     - ENABLE_SS: ON
       USE_CRYPTO_OPENSSL: ON
       USE_CRYPTO_MBEDTLS: OFF
-      BUILD_SUFFIX: "openssl_vc2015_x64"
+      BUILD_SUFFIX: "openssl_vc2017_x64"
+      ARCH: 64
 
     # build with mbed TLS library
     - ENABLE_SS: ON
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: ON
-      BUILD_SUFFIX: "mbedtls_vc2015.x64"
+      BUILD_SUFFIX: "mbedtls_vc2017_x64"
+      ARCH: 64
 
     # build https proxy with openssl library
     #- ENABLE_SS: ON
@@ -43,16 +46,16 @@ install:
   # recursive clone 
 - git submodule update --init --recursive --depth 3
   # VC env
-- '"C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x64'
+- '"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars%ARCH%.bat"'
   # mbedTLS
 - cd \
-- appveyor DownloadFile https://tls.mbed.org/download/mbedtls-2.6.0-apache.tgz
-- 7z x mbedtls-2.6.0-apache.tgz -so | 7z x -si -ttar > nul
-- cd mbedtls-2.6.0
+- appveyor DownloadFile https://tls.mbed.org/download/mbedtls-2.7.2-apache.tgz
+- 7z x mbedtls-2.7.2-apache.tgz -so | 7z x -si -ttar > nul
+- cd mbedtls-2.7.2
 - mkdir lib
 - mkdir cmake-build
 - cd cmake-build
-- cmake -G "Visual Studio 14 2015 Win64" .. 
+- cmake -G "Visual Studio 15 2017 Win64" .. 
 - cmake --build . --config Release --target mbedtls
 - move library\Release\*.lib ..\lib\
   # Libevent
@@ -79,7 +82,7 @@ build_script:
 - set PATH=C:\Python27-x64\scripts;C:\Python27-x64;%PATH%
 - mkdir cmake-build
 - cd cmake-build
-- cmake -G "Visual Studio 14 2015 Win64" -DENABLE_HTTPS_PROXY:STRING="%ENABLE_HTTPS_PROXY%" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-2.1.8-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-2.6.0 -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
+- cmake -G "Visual Studio 15 2017 Win64" -DENABLE_HTTPS_PROXY:STRING="%ENABLE_HTTPS_PROXY%" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-2.1.8-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-2.7.2 -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
 - cmake --build . --config Release
 # TODO: 
 # - cpack
