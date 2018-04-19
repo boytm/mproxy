@@ -68,6 +68,19 @@ typedef mbedtls_md_info_t digest_type_t;
 
 #endif
 
+#define MAX_NONCE_LENGTH MAX_IV_LENGTH  // 32???
+#define MAX_TAG_LENGTH          16
+#define CHUNK_SIZE_LEN          2
+#define CHUNK_SIZE_MASK         0x3FFF
+
+#define ADDRTYPE_MASK 0xF
+
+#define CRYPTO_ERROR     -2
+#define CRYPTO_NEED_MORE -1
+#define CRYPTO_OK         0
+
+
+
 #ifdef USE_CRYPTO_APPLECC
 
 #include <CommonCrypto/CommonCrypto.h>
@@ -100,6 +113,9 @@ typedef struct {
 #ifdef USE_CRYPTO_APPLECC
     cipher_cc_t cc;
 #endif
+    uint8_t salt[MAX_KEY_LENGTH]; // first rand bytes of TCP stream, used by HKDF
+    uint8_t skey[MAX_KEY_LENGTH]; // HKDF derived AEAD key
+    uint8_t nonce[MAX_NONCE_LENGTH]; // AEAD iv, increment every operation
 } cipher_ctx_t;
 
 #include <stdint.h>
@@ -140,6 +156,13 @@ enum{
     AES_192_CFB1,
     AES_256_CFB1,
     CHACHA20,
+    AES_128_GCM,
+    AES_192_GCM,
+    AES_256_GCM,
+    AES_128_OCB,
+    AES_192_OCB,
+    AES_256_OCB,
+    CHACHA20_IETF_POLY1305,
     CIPHER_NUM,      /* must be last */
 };
 
@@ -149,6 +172,7 @@ enum{
 
 struct enc_ctx {
     uint8_t init;
+    uint8_t aead;
     cipher_ctx_t evp;
 };
 
@@ -158,6 +182,9 @@ char * ss_encrypt(char *ciphertext, char *plaintext, ssize_t *len,
                   struct enc_ctx *ctx);
 char * ss_decrypt(char *plaintext, char *ciphertext, ssize_t *len,
                   struct enc_ctx *ctx);
+int aead_encrypt(char *ciphertext, char *plaintext, ssize_t *len, struct enc_ctx *ctx);
+int aead_decrypt(char *plaintext, char *ciphertext, ssize_t *len, struct enc_ctx *ctx);
+
 void enc_ctx_init(int method, struct enc_ctx *ctx, int enc);
 int enc_init(const char *pass, const char *method);
 int enc_get_iv_len(void);

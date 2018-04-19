@@ -90,7 +90,38 @@ static enum bufferevent_filter_result input_filter(struct evbuffer *src, struct 
 		} \
 	} while(0)
 
-    CRYPT(decrypt, conn->d_ctx, BLOCK_SIZE);
+    if (conn->d_ctx.aead)
+    {
+        struct evbuffer_iovec vec_dst[1];
+        char *ciphertext = evbuffer_pullup(src, -1);
+        if (1 != evbuffer_reserve_space(dst, evbuffer_get_length(src) + BLOCK_SIZE, vec_dst, 1)) {
+                /* malloc space failed */ 
+                return BEV_ERROR; 
+        }
+        vec_dst[0].iov_len = 0;
+
+        int consume = evbuffer_get_length(src);
+        int produce = aead_decrypt(vec_dst[0].iov_base, ciphertext, &consume, &conn->e_ctx);
+        if (produce < 0) {
+                LOGE("aead decrypt failed"); 
+                return BEV_ERROR; 
+        }
+        else if (produce == 0 && consume == 0) {
+            return BEV_NEED_MORE;
+        }
+        else {
+            evbuffer_drain(src, consume);
+            vec_dst[0].iov_len = produce;
+
+            if (-1 == evbuffer_commit_space(dst, vec_dst, 1)) {
+                LOGE("evbuffer commit space failed");
+                return BEV_ERROR;
+            }
+        }
+    }
+    else {
+        CRYPT(decrypt, conn->d_ctx, BLOCK_SIZE);
+    }
 
 	return BEV_OK;
 }
@@ -131,7 +162,35 @@ static enum bufferevent_filter_result output_filter(struct evbuffer *src, struct
 			return BEV_ERROR;
 		}
 	}*/
+    if (conn->e_ctx.aead)
+    {
+        struct evbuffer_iovec vec_dst[1];
+        char *plaintext = evbuffer_pullup(src, -1);
+        if (1 != evbuffer_reserve_space(dst, evbuffer_get_length(src) + (CHUNK_SIZE_LEN + 2 * MAX_TAG_LENGTH + BLOCK_SIZE), vec_dst, 1)) {
+            /* malloc space failed */
+            return BEV_ERROR;
+        }
+        vec_dst[0].iov_len = 0;
+
+        int consume = evbuffer_get_length(src);
+        int produce = aead_encrypt(vec_dst[0].iov_base, plaintext, &consume, &conn->d_ctx);
+        if (produce < 0) {
+            LOGE("aead encrypt failed");
+            return BEV_ERROR;
+        }
+        evbuffer_drain(src, consume);
+        vec_dst[0].iov_len = produce;
+
+        if (-1 == evbuffer_commit_space(dst, vec_dst, 1)) {
+            LOGE("evbuffer commit space failed");
+            return BEV_ERROR;
+        }
+    }
+    else
+    {
     CRYPT(encrypt, conn->e_ctx, MAX_IV_LENGTH + BLOCK_SIZE);
+    }
+
 
 	return BEV_OK;
 }
