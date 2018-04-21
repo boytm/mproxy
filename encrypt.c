@@ -53,10 +53,6 @@
 
 #endif
 
-#ifdef _WIN32
-#include <Winsock2.h>  // ntoh hton
-#endif
-
 #include "utils.h"
 
 #define OFFSET_ROL(p, o) ((uint64_t)(*(p + o)) << (8 * o))
@@ -108,6 +104,7 @@ static struct {
 #endif
 } supported_ciphers[CIPHER_NUM] =
 {
+    // stream: tcp stream first rand bytes is iv
     {"table",              0,    0,   0, NULL, _("table",               CCAlgorithmInvalid) },
     {"rc4",               16,    0,   0, NULL, _("ARC4-128",            CCAlgorithmRC4)     },
     {"rc4-md5",           16,   16,   0, NULL, _("ARC4-128",            CCAlgorithmRC4)     },
@@ -136,7 +133,7 @@ static struct {
     {"aes-192-cfb1",      24,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     {"aes-256-cfb1",      32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     {"chacha20",          32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    // AEAD: iv_len = salt_len = key_len
+    // AEAD: tcp stream first rand bytes = key len
     {"aes-128-gcm",       16,   12,  16, NULL, _("AES-128-GCM",         CCAlgorithmInvalid) },
     {"aes-192-gcm",       24,   12,  16, NULL, _("AES-192-GCM",         CCAlgorithmInvalid) },
     {"aes-256-gcm",       32,   12,  16, NULL, _("AES-256-GCM",         CCAlgorithmInvalid) },
@@ -1041,7 +1038,6 @@ uint8_t *n,
 uint8_t *k)
 {
     int err = CRYPTO_OK;
-    unsigned long long long_clen = 0;
 
     size_t nlen = supported_ciphers[enc_method].iv_size;
     size_t tlen = supported_ciphers[enc_method].tag_size;
@@ -1101,7 +1097,6 @@ uint8_t *ad, size_t adlen,
 uint8_t *n, uint8_t *k)
 {
     int err = CRYPTO_ERROR;
-    unsigned long long long_plen = 0;
 
     size_t nlen = supported_ciphers[enc_method].iv_size;
     size_t tlen = supported_ciphers[enc_method].tag_size;

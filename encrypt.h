@@ -30,6 +30,7 @@
 #ifndef _WIN32
 #include <sys/socket.h>
 #else
+#include <Winsock2.h>  // ntoh hton
 
 #ifdef max
 #undef max
@@ -44,6 +45,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
+
+#ifdef _MSC_VER
+#define ssize_t int
+#endif
+
 
 #if defined(USE_CRYPTO_OPENSSL)
 
@@ -118,12 +125,6 @@ typedef struct {
     uint8_t nonce[MAX_NONCE_LENGTH]; // AEAD iv, increment every operation
 } cipher_ctx_t;
 
-#include <stdint.h>
-
-#ifdef _MSC_VER
-#define ssize_t int
-#endif
-
 #define BLOCK_SIZE 32
 
 #define NONE                -1
@@ -171,8 +172,8 @@ enum{
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
 struct enc_ctx {
-    uint8_t init;
-    uint8_t aead;
+    unsigned int init:1;
+    unsigned int aead:1;
     cipher_ctx_t evp;
 };
 
