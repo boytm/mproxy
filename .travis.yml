@@ -36,15 +36,19 @@ branches:
 addons:
   apt:
     sources:
-      - george-edison55-precise-backports # cmake 3.2.3 / doxygen 1.8.3
+      # aliases defined in https://github.com/travis-ci/apt-source-whitelist
+      #- deadsnakes
+      - sourceline: 'ppa:ondrej/apache2'
     packages:
       - cmake
       - cmake-data
       - scons
       - libssl-dev
-      - libevent-dev
 
 install:
+  # build and install libevent
+  - wget https://github.com/libevent/libevent/releases/download/release-2.1.8-stable/libevent-2.1.8-stable.tar.gz && tar -xf libevent-2.1.8-stable.tar.gz && cd libevent-2.1.8-stable && ./configure && sudo make install && cd - 
+  # build and install mbedtls
   - test "$USE_CRYPTO_MBEDTLS" != true || ( wget https://tls.mbed.org/download/mbedtls-2.1.9-gpl.tgz && tar -xf mbedtls-2.1.9-gpl.tgz && cd mbedtls-2.1.9 && make && sudo make install && cd - )
 
 script:
