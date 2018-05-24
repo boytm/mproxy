@@ -647,6 +647,7 @@ main(int argc, char ** argv) {
     evdns_base_set_option(evdns, "randomize-case:", "0");
 
     evhtp = evhtp_new(evbase, NULL);
+    evhtp->disable_parse_query_body = 1;
 
 
 #ifdef ENABLE_HTTPS_PROXY
