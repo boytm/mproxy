@@ -1,44 +1,15 @@
-# Object files
+# cmake manages these; they shouldn't go in version control
+#
+#
+# they aren't going into version control, but shouldn't be
+# completely ignored. I'm removing the mods here.
+#
+build/
+*.d
 *.o
-*.ko
 *.obj
-*.elf
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
 *.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-
-# cmake
-CMakeFiles/
-CMakeCache.txt
-
-# vim
-.swp
+*.dll
+*.zip
+.*.swp
 *~
-
-# VC build directory
-/Debug
-/Release

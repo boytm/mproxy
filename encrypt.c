@@ -1147,20 +1147,23 @@ uint8_t *n, uint8_t *k)
     return err;
 }
 
-#ifdef USE_CRYPTO_MBEDTLS
-int crypto_hkdf(const mbedtls_md_info_t *md, const unsigned char *salt,
+#define SUBKEY_INFO "ss-subkey"
+#if USE_CRYPTO_MBEDTLS
+int crypto_hkdf_extract(const mbedtls_md_info_t *md, const unsigned char *salt,
     int salt_len, const unsigned char *ikm, int ikm_len,
-    const unsigned char *info, int info_len, unsigned char *okm,
-    int okm_len);
+    unsigned char *prk);
+int crypto_hkdf_expand(const mbedtls_md_info_t *md, const unsigned char *prk,
+    int prk_len, const unsigned char *info, int info_len,
+    unsigned char *okm, int okm_len);
 #endif
 
-#define SUBKEY_INFO "ss-subkey"
-
-static void
-aead_cipher_ctx_set_key(cipher_ctx_t *cipher_ctx, int enc)
+/* HKDF-Extract + HKDF-Expand */
+int crypto_hkdf(const unsigned char *salt,
+    int salt_len, const unsigned char *ikm, int ikm_len,
+    const unsigned char *info, int info_len, unsigned char *okm,
+    int okm_len)
 {
 #if USE_CRYPTO_OPENSSL
-    size_t outlen = supported_ciphers[enc_method].key_size;
     EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
     if (pctx == NULL) {
         FATAL("Cannot create hkdf context");
@@ -1168,33 +1171,36 @@ aead_cipher_ctx_set_key(cipher_ctx_t *cipher_ctx, int enc)
 
     if (EVP_PKEY_derive_init(pctx) <= 0 ||
         EVP_PKEY_CTX_set_hkdf_md(pctx, EVP_sha1()) <= 0 ||
-        EVP_PKEY_CTX_set1_hkdf_salt(pctx, cipher_ctx->salt, supported_ciphers[enc_method].key_size) <= 0 ||
-        EVP_PKEY_CTX_set1_hkdf_key(pctx, enc_key, supported_ciphers[enc_method].key_size) <= 0 ||
+        EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt, salt_len) <= 0 ||
+        EVP_PKEY_CTX_set1_hkdf_key(pctx, ikm, ikm_len) <= 0 ||
         EVP_PKEY_CTX_add1_hkdf_info(pctx, SUBKEY_INFO, strlen(SUBKEY_INFO)) <= 0) {
         FATAL("Cannot setup hkdf context");
     }
     // Since the HKDF output length is variable, passing a NULL buffer as a means 
     // to obtain the requisite length is not meaningful with HKDF
-    if (EVP_PKEY_derive(pctx, cipher_ctx->skey, &outlen) <= 0) {
+    if (EVP_PKEY_derive(pctx, okm, &okm_len) <= 0) {
         FATAL("Derive hkdf key failed");
     }
-    assert(outlen == supported_ciphers[enc_method].key_size);
-
-    if (!EVP_CipherInit_ex(cipher_ctx->evp, supported_ciphers[enc_method].cipher, NULL, cipher_ctx->skey, NULL, enc)) {
-        FATAL("Cannot set hkdf derived key");
-    }
-    if (!EVP_CIPHER_CTX_ctrl(cipher_ctx->evp, EVP_CTRL_AEAD_SET_IVLEN, supported_ciphers[enc_method].iv_size, NULL)) {
-        FATAL("Cannot set aead iv length");
-    }
-    
+    assert(okm_len == supported_ciphers[enc_method].key_size);
     EVP_PKEY_CTX_free(pctx);
-#elif USE_CRYPTO_MBEDTLS
+    return 0;
+#else
+    unsigned char prk[MBEDTLS_MD_MAX_SIZE];
     const digest_type_t *md = mbedtls_md_info_from_string("SHA1");
     if (md == NULL) {
         FATAL("SHA1 Digest not found in crypto library");
     }
 
-    int err = crypto_hkdf(md,
+    return crypto_hkdf_extract(md, salt, salt_len, ikm, ikm_len, prk) ||
+        crypto_hkdf_expand(md, prk, mbedtls_md_get_size(md), info, info_len,
+        okm, okm_len);
+#endif
+}
+
+static void
+aead_cipher_ctx_set_key(cipher_ctx_t *cipher_ctx, int enc)
+{
+    int err = crypto_hkdf(
         cipher_ctx->salt, supported_ciphers[enc_method].key_size,
         enc_key, supported_ciphers[enc_method].key_size,
         (uint8_t *)SUBKEY_INFO, strlen(SUBKEY_INFO),
@@ -1203,6 +1209,15 @@ aead_cipher_ctx_set_key(cipher_ctx_t *cipher_ctx, int enc)
         FATAL("Unable to generate subkey");
     }
 
+#if USE_CRYPTO_OPENSSL
+    if (!EVP_CipherInit_ex(cipher_ctx->evp, supported_ciphers[enc_method].cipher, NULL, cipher_ctx->skey, NULL, enc)) {
+        FATAL("Cannot set hkdf derived key");
+    }
+    if (!EVP_CIPHER_CTX_ctrl(cipher_ctx->evp, EVP_CTRL_AEAD_SET_IVLEN, supported_ciphers[enc_method].iv_size, NULL)) {
+        FATAL("Cannot set aead iv length");
+    }
+
+#elif USE_CRYPTO_MBEDTLS
     if (mbedtls_cipher_setkey(&cipher_ctx->evp, cipher_ctx->skey,
         supported_ciphers[enc_method].key_size * 8, enc) != 0) {
         FATAL("Cannot set mbed TLS cipher key");
@@ -1477,18 +1492,6 @@ int crypto_hkdf_expand(const mbedtls_md_info_t *md, const unsigned char *prk,
     return 0;
 }
 
-/* HKDF-Extract + HKDF-Expand */
-int crypto_hkdf(const mbedtls_md_info_t *md, const unsigned char *salt,
-    int salt_len, const unsigned char *ikm, int ikm_len,
-    const unsigned char *info, int info_len, unsigned char *okm,
-    int okm_len)
-{
-    unsigned char prk[MBEDTLS_MD_MAX_SIZE];
-
-    return crypto_hkdf_extract(md, salt, salt_len, ikm, ikm_len, prk) ||
-        crypto_hkdf_expand(md, prk, mbedtls_md_get_size(md), info, info_len,
-        okm, okm_len);
-}
 #endif
 
 #endif
