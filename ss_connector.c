@@ -46,6 +46,8 @@ static void free_context(void *ctx)
 {
 	ss_conn *conn = (ss_conn*)ctx;
 
+    // For both OpenSSL and mbed TLS, release is free pointer in struct and zero struct.
+    // And release a zeroed struct is safe.
     cipher_context_release(&conn->e_ctx.evp);
     cipher_context_release(&conn->d_ctx.evp);
 
@@ -164,31 +166,37 @@ static enum bufferevent_filter_result output_filter(struct evbuffer *src, struct
 	}*/
     if (conn->e_ctx.aead)
     {
-        struct evbuffer_iovec vec_dst[1];
-        char *plaintext = evbuffer_pullup(src, -1);
-        if (1 != evbuffer_reserve_space(dst, evbuffer_get_length(src) + (CHUNK_SIZE_LEN + 2 * MAX_TAG_LENGTH + BLOCK_SIZE), vec_dst, 1)) {
-            /* malloc space failed */
-            return BEV_ERROR;
-        }
-        vec_dst[0].iov_len = 0;
+        int src_len = evbuffer_get_length(src);
+        do {
+            int consume = src_len > CHUNK_SIZE_MASK ? CHUNK_SIZE_MASK : src_len;
+            struct evbuffer_iovec vec_dst[1];
+            char *plaintext = evbuffer_pullup(src, consume);
+            if (1 != evbuffer_reserve_space(dst, consume + (CHUNK_SIZE_LEN + 2 * MAX_TAG_LENGTH + BLOCK_SIZE), vec_dst, 1)) {
+                /* malloc space failed */
+                return BEV_ERROR;
+            }
+            vec_dst[0].iov_len = 0;
 
-        int consume = evbuffer_get_length(src);
-        int produce = aead_encrypt(vec_dst[0].iov_base, plaintext, &consume, &conn->d_ctx);
-        if (produce < 0) {
-            LOGE("aead encrypt failed");
-            return BEV_ERROR;
-        }
-        evbuffer_drain(src, consume);
-        vec_dst[0].iov_len = produce;
+            //int consume = evbuffer_get_length(src);
+            int produce = aead_encrypt(vec_dst[0].iov_base, plaintext, &consume, &conn->d_ctx);
+            if (produce < 0) {
+                LOGE("aead encrypt failed");
+                return BEV_ERROR;
+            }
+            evbuffer_drain(src, consume);
+            vec_dst[0].iov_len = produce;
 
-        if (-1 == evbuffer_commit_space(dst, vec_dst, 1)) {
-            LOGE("evbuffer commit space failed");
-            return BEV_ERROR;
-        }
+            if (-1 == evbuffer_commit_space(dst, vec_dst, 1)) {
+                LOGE("evbuffer commit space failed");
+                return BEV_ERROR;
+            }
+            //LOGD("src %d consume %d", src_len, consume);
+            src_len -= consume;
+        } while(src_len > 0);
     }
     else
     {
-    CRYPT(encrypt, conn->e_ctx, MAX_IV_LENGTH + BLOCK_SIZE);
+        CRYPT(encrypt, conn->e_ctx, MAX_IV_LENGTH + BLOCK_SIZE);
     }
 
 
