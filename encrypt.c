@@ -41,14 +41,17 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/version.h>
+# if MBEDTLS_VERSION_NUMBER >= 0x020B0000
+# include <mbedtls/hkdf.h>
+# endif
 #define CIPHER_UNSUPPORTED "unsupported"
 
 #include <time.h>
 #ifdef _WIN32
-#include <windows.h>
-#include <wincrypt.h>
+# include <windows.h>
+# include <wincrypt.h>
 #else
-#include <stdio.h>
+# include <stdio.h>
 #endif
 
 #endif
@@ -1150,18 +1153,18 @@ uint8_t *n, uint8_t *k)
 #define SUBKEY_INFO "ss-subkey"
 #if USE_CRYPTO_MBEDTLS
 int crypto_hkdf_extract(const mbedtls_md_info_t *md, const unsigned char *salt,
-    int salt_len, const unsigned char *ikm, int ikm_len,
+    size_t salt_len, const unsigned char *ikm, size_t ikm_len,
     unsigned char *prk);
 int crypto_hkdf_expand(const mbedtls_md_info_t *md, const unsigned char *prk,
-    int prk_len, const unsigned char *info, int info_len,
-    unsigned char *okm, int okm_len);
+    size_t prk_len, const unsigned char *info, size_t info_len,
+    unsigned char *okm, size_t okm_len);
 #endif
 
 /* HKDF-Extract + HKDF-Expand */
 int crypto_hkdf(const unsigned char *salt,
-    int salt_len, const unsigned char *ikm, int ikm_len,
-    const unsigned char *info, int info_len, unsigned char *okm,
-    int okm_len)
+    size_t salt_len, const unsigned char *ikm, size_t ikm_len,
+    const unsigned char *info, size_t info_len, unsigned char *okm,
+    size_t okm_len)
 {
 #if USE_CRYPTO_OPENSSL
     EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
@@ -1185,15 +1188,18 @@ int crypto_hkdf(const unsigned char *salt,
     EVP_PKEY_CTX_free(pctx);
     return 0;
 #else
-    unsigned char prk[MBEDTLS_MD_MAX_SIZE];
-    const digest_type_t *md = mbedtls_md_info_from_string("SHA1");
+    const digest_type_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA1);
     if (md == NULL) {
         FATAL("SHA1 Digest not found in crypto library");
     }
-
+# if MBEDTLS_VERSION_NUMBER >= 0x020B0000
+    return mbedtls_hkdf(md, salt, salt_len, ikm, ikm_len, info, info_len, okm, okm_len);
+# else
+    unsigned char prk[MBEDTLS_MD_MAX_SIZE];
     return crypto_hkdf_extract(md, salt, salt_len, ikm, ikm_len, prk) ||
         crypto_hkdf_expand(md, prk, mbedtls_md_get_size(md), info, info_len,
         okm, okm_len);
+# endif
 #endif
 }
 
@@ -1400,22 +1406,20 @@ aead_decrypt(char *plaintext, char *ciphertext, ssize_t *len, struct enc_ctx *ct
     return plen;
 }
 
-#ifdef USE_CRYPTO_MBEDTLS
+#if defined(USE_CRYPTO_MBEDTLS) && MBEDTLS_VERSION_NUMBER < 0x020B0000
 /* HKDF-Extract(salt, IKM) -> PRK */
 int crypto_hkdf_extract(const mbedtls_md_info_t *md, const unsigned char *salt,
-    int salt_len, const unsigned char *ikm, int ikm_len,
+    size_t salt_len, const unsigned char *ikm, size_t ikm_len,
     unsigned char *prk)
 {
-    int hash_len;
     unsigned char null_salt[MBEDTLS_MD_MAX_SIZE] = { '\0' };
 
-    if (salt_len < 0) {
-        return CRYPTO_ERROR;
-    }
-
-    hash_len = mbedtls_md_get_size(md);
-
     if (salt == NULL) {
+        size_t hash_len = mbedtls_md_get_size(md);
+        if (hash_len == 0) {
+            return CRYPTO_ERROR;
+        }
+
         salt = null_salt;
         salt_len = hash_len;
     }
@@ -1425,27 +1429,29 @@ int crypto_hkdf_extract(const mbedtls_md_info_t *md, const unsigned char *salt,
 
 /* HKDF-Expand(PRK, info, L) -> OKM */
 int crypto_hkdf_expand(const mbedtls_md_info_t *md, const unsigned char *prk,
-    int prk_len, const unsigned char *info, int info_len,
-    unsigned char *okm, int okm_len)
+    size_t prk_len, const unsigned char *info, size_t info_len,
+    unsigned char *okm, size_t okm_len)
 {
-    int hash_len;
-    int N;
-    int T_len = 0, where = 0, i, ret;
+    size_t hash_len;
+    size_t N;
+    size_t T_len = 0, where = 0, i;
+    int ret;
     mbedtls_md_context_t ctx;
     unsigned char T[MBEDTLS_MD_MAX_SIZE];
 
-    if (info_len < 0 || okm_len < 0 || okm == NULL) {
+    if (okm == NULL) {
         return CRYPTO_ERROR;
     }
 
     hash_len = mbedtls_md_get_size(md);
 
-    if (prk_len < hash_len) {
+    if (prk_len < hash_len || hash_len == 0) {
         return CRYPTO_ERROR;
     }
 
     if (info == NULL) {
         info = (const unsigned char *)"";
+        info_len = 0;
     }
 
     N = okm_len / hash_len;
