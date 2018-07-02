@@ -34,7 +34,7 @@ environment:
     - ENABLE_SS: ON
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: ON
-      MBEDTLS_VERSION: 2.7.2
+      MBEDTLS_VERSION: 2.7.5
       BUILD_SUFFIX: "mbedtls_vc2017_x64"
       BITS: 64
 

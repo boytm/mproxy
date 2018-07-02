@@ -1,18 +1,21 @@
 
 #OPENSSL_DIR=/d/openssl
 OPENSSL_DIR=/d/openssl-1.1.0
+MBEDTLS_DIR=/d/Sources/mbedtls-2.1.14
 LIBEVENT_DIR=/d/Sources/libevent-2.1.8-stable
 SYSINC:= $(LIBEVENT_DIR)/include/ \
 	$(LIBEVENT_DIR)/WIN32-Code/ \
-	$(OPENSSL_DIR)/include
+	$(OPENSSL_DIR)/include \
+	$(MBEDTLS_DIR)/include
 SYSLIB:= $(LIBEVENT_DIR)/.libs/ \
-	$(OPENSSL_DIR)/lib
+	$(OPENSSL_DIR)/lib \
+	$(MBEDTLS_DIR)/library
 
 CC:= gcc
 CFLAGS:= -Wall -g -O2 -static -DNDEBUG -DNO_SYS_UN=1 -DENABLE_SS=1 \
 	-Ilibevhtp  -I libevhtp/compat/ \
 	-levent -lws2_32 \
-	-DUSE_CRYPTO_OPENSSL=1 -lcrypto \
+	-DUSE_CRYPTO_MBEDTLS=1 -lmbedcrypto \
 	$(addprefix -isystem , $(SYSINC)) \
 	$(addprefix -L , $(SYSLIB)) 
 
