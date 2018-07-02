@@ -5,6 +5,7 @@
 #include "utils.h"
 
 #define MAX_OUTPUT (512*1024)
+#define MAX_REQUEST_BODY_SIZE (1024*1024)
 
 extern struct evdns_base *evdns;
 

@@ -648,6 +648,7 @@ main(int argc, char ** argv) {
 
     evhtp = evhtp_new(evbase, NULL);
     evhtp->disable_parse_query_body = 1;
+    evhtp->max_body_size = MAX_REQUEST_BODY_SIZE;
 
 
 #ifdef ENABLE_HTTPS_PROXY
