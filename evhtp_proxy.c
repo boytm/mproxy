@@ -55,6 +55,7 @@ const char *g_socks_server = NULL;
 int g_socks_port = DEFAULT_SOCKS5_PORT;
 int g_https_proxy = 0;
 int use_syslog = 0;
+int g_enable_nodelay = 0;
 
 enum upstream_mode {
 	UPSTREAM_TCP,
@@ -483,6 +484,10 @@ void usage(const char *program)
         "  --ssl_certificate <fullchain.pem>   set ssl certificate\n"
         "  --ssl_certificate_key <privkey.pem> set ssl private key\n"
 #endif
+#ifdef TCP_NODELAY
+        "  --tcp-nodelay         enable TCP NODELAY\n"
+#endif
+        "  --client-max-body-size <size>    maximum allowed size of the client request body(unit MB, 0 allow any size, default 1MB)\n"
         "  -v, --verbose         verbose logging\n"
         "  -V, --version         show version number and quit\n"
         "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
@@ -503,6 +508,8 @@ enum {
     OPTION_PID_FILE,
     OPTION_SSL_CERTIFICATE,
     OPTION_SSL_CERTIFICATE_KEY,
+    OPTION_TCP_NODELAY,
+    OPTION_CLIENT_MAX_BODY_SIZE,
 };
 
 int
@@ -522,6 +529,7 @@ main(int argc, char ** argv) {
     const char *ssl_certificate = NULL;
     const char *ssl_certificate_key = NULL;
 #endif
+    int client_max_body_size = MAX_REQUEST_BODY_SIZE;
     int verbose = 0;
 	int opt;
     int option_index = 0;
@@ -536,6 +544,10 @@ main(int argc, char ** argv) {
         {"ssl_certificate", required_argument, NULL, OPTION_SSL_CERTIFICATE},
         {"ssl_certificate_key", required_argument, NULL, OPTION_SSL_CERTIFICATE_KEY},
 #endif
+#ifdef TCP_NODELAY
+        {"tcp-nodelay", no_argument, NULL, OPTION_TCP_NODELAY},
+#endif
+        {"client-max-body-size", required_argument, NULL, OPTION_CLIENT_MAX_BODY_SIZE},
         {"help", no_argument, NULL, 'h'},
         {"verbose", no_argument, NULL, 'v'},
         {"version", no_argument, NULL, 'V'},
@@ -601,6 +613,12 @@ main(int argc, char ** argv) {
             ssl_certificate_key = optarg;
             break;
 #endif
+        case OPTION_TCP_NODELAY:
+            g_enable_nodelay = 1;
+            break;
+        case OPTION_CLIENT_MAX_BODY_SIZE:
+            client_max_body_size = 1024 * 1024 * atof(optarg);
+            break;
         case 'V':
             version(argv[0]);
             exit(EXIT_SUCCESS);
@@ -647,8 +665,9 @@ main(int argc, char ** argv) {
     evdns_base_set_option(evdns, "randomize-case:", "0");
 
     evhtp = evhtp_new(evbase, NULL);
+    evhtp->enable_nodelay = g_enable_nodelay;
     evhtp->disable_parse_query_body = 1;
-    evhtp->max_body_size = MAX_REQUEST_BODY_SIZE;
+    evhtp->max_body_size = client_max_body_size;
 
 
 #ifdef ENABLE_HTTPS_PROXY

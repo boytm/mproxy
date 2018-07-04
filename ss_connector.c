@@ -152,6 +152,12 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
         bufferevent_free(bev);
 	} else if (what & BEV_EVENT_CONNECTED) {
 		LOGD("upstrem connected with bev %p (sock %d)", bev, bufferevent_getfd(bev));
+#if defined TCP_NODELAY
+		if (g_enable_nodelay == 1) {
+			int on = 1;
+			setsockopt(bufferevent_getfd(bev), IPPROTO_TCP, TCP_NODELAY, (void *)&on, sizeof(on));
+		}
+#endif
 
 		/* TCP */
 		bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
