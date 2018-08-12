@@ -19,6 +19,7 @@ env:
   - ENABLE_SS: ON
     USE_CRYPTO_OPENSSL: OFF
     USE_CRYPTO_MBEDTLS: ON
+    MBEDTLS_VERSION: 2.1.14
 
   # build https proxy with openssl library
   - ENABLE_SS: ON
@@ -36,20 +37,24 @@ branches:
 addons:
   apt:
     sources:
-      - george-edison55-precise-backports # cmake 3.2.3 / doxygen 1.8.3
+      # aliases defined in https://github.com/travis-ci/apt-source-whitelist
+      #- deadsnakes
+      - sourceline: 'ppa:ondrej/apache2'
     packages:
       - cmake
       - cmake-data
       - scons
       - libssl-dev
-      - libevent-dev
 
 install:
-  - test "$USE_CRYPTO_MBEDTLS" != true || ( wget https://tls.mbed.org/download/mbedtls-2.1.9-gpl.tgz && tar -xf mbedtls-2.1.9-gpl.tgz && cd mbedtls-2.1.9 && make && sudo make install && cd - )
+  # build and install libevent
+  - wget https://github.com/libevent/libevent/releases/download/release-2.1.8-stable/libevent-2.1.8-stable.tar.gz && tar -xf libevent-2.1.8-stable.tar.gz && cd libevent-2.1.8-stable && ./configure && make && sudo make install && cd - 
+  # build and install mbedtls
+  - test "$USE_CRYPTO_MBEDTLS" != true || ( wget https://tls.mbed.org/download/mbedtls-${MBEDTLS_VERSION}-gpl.tgz && tar -xf mbedtls-${MBEDTLS_VERSION}-gpl.tgz && cd mbedtls-${MBEDTLS_VERSION} && make && sudo make install && cd - )
 
 script:
   - scons && scons --clean
-  - mkdir -p build && cd build && cmake .. -DENABLE_HTTPS_PROXY:STRING=$ENABLE_HTTPS_PROXY -DENABLE_SS:STRING=$ENABLE_SS -DUSE_CRYPTO_OPENSSL:STRING=$USE_CRYPTO_OPENSSL && make
+  - mkdir -p build && cd build && cmake .. -DENABLE_HTTPS_PROXY:STRING=$ENABLE_HTTPS_PROXY -DENABLE_SS:STRING=$ENABLE_SS -DUSE_CRYPTO_OPENSSL:STRING=$USE_CRYPTO_OPENSSL -DUSE_CRYPTO_MBEDTLS:STRING=$USE_CRYPTO_MBEDTLS && make
 
 notifications:
   recipients:

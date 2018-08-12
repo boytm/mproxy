@@ -25,12 +25,14 @@
 #include "config.h"
 #endif
 
+#include "encrypt.h"
 #include <assert.h>
 #include <stdint.h>
 
 #if defined(USE_CRYPTO_OPENSSL)
 
 #include <openssl/md5.h>
+#include <openssl/kdf.h>
 #include <openssl/rand.h>
 
 #elif defined(USE_CRYPTO_MBEDTLS)
@@ -39,19 +41,21 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/version.h>
+# if MBEDTLS_VERSION_NUMBER >= 0x020B0000
+# include <mbedtls/hkdf.h>
+# endif
 #define CIPHER_UNSUPPORTED "unsupported"
 
 #include <time.h>
 #ifdef _WIN32
-#include <windows.h>
-#include <wincrypt.h>
+# include <windows.h>
+# include <wincrypt.h>
 #else
-#include <stdio.h>
+# include <stdio.h>
 #endif
 
 #endif
 
-#include "encrypt.h"
 #include "utils.h"
 
 #define OFFSET_ROL(p, o) ((uint64_t)(*(p + o)) << (8 * o))
@@ -91,8 +95,9 @@ static void dump(char *tag, char *text, int len)
 
 static struct {
     const char *name;
-    const int key_size;
-    const int iv_size;
+    const uint8_t key_size;
+    const uint8_t iv_size;
+    const uint8_t tag_size;
     const cipher_kt_t *cipher;
 #ifdef USE_CRYPTO_MBEDTLS
     const char *cipher_mbedtls;
@@ -102,34 +107,43 @@ static struct {
 #endif
 } supported_ciphers[CIPHER_NUM] =
 {
-    {"table",              0,    0, NULL, _("table",               CCAlgorithmInvalid) },    
-    {"rc4",               16,    0, NULL, _("ARC4-128",            CCAlgorithmRC4)     },  
-    {"rc4-md5",           16,   16, NULL, _("ARC4-128",            CCAlgorithmRC4)     },      
-    {"aes-128-cfb",       16,   16, NULL, _("AES-128-CFB128",      CCAlgorithmAES)     },          
-    {"aes-192-cfb",       24,   16, NULL, _("AES-192-CFB128",      CCAlgorithmAES)     },          
-    {"aes-256-cfb",       32,   16, NULL, _("AES-256-CFB128",      CCAlgorithmAES)     },  
-    {"bf-cfb",            16,    8, NULL, _("BLOWFISH-CFB64",      CCAlgorithmBlowfish)},     
-    {"camellia-128-cfb",  16,   16, NULL, _("CAMELLIA-128-CFB128", CCAlgorithmInvalid) },               
-    {"camellia-192-cfb",  24,   16, NULL, _("CAMELLIA-192-CFB128", CCAlgorithmInvalid) },               
-    {"camellia-256-cfb",  32,   16, NULL, _("CAMELLIA-256-CFB128", CCAlgorithmInvalid) },               
-    {"cast5-cfb",         16,    8, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmCAST)    },        
-    {"des-cfb",            8,    8, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmDES)     },      
-    {"idea-cfb",          16,    8, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },       
-    {"rc2-cfb",           16,    8, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmRC2)     },      
-    {"seed-cfb",          16,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },       
-    {"aes-128-ofb",       16,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-192-ofb",       24,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-256-ofb",       32,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-128-ctr",       16,   16, NULL, _("AES-128-CTR",         CCAlgorithmInvalid) },
-    {"aes-192-ctr",       24,   16, NULL, _("AES-192-CTR",         CCAlgorithmInvalid) },
-    {"aes-256-ctr",       32,   16, NULL, _("AES-256-CTR",         CCAlgorithmInvalid) },
-    {"aes-128-cfb8",      16,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-192-cfb8",      24,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-256-cfb8",      32,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-128-cfb1",      16,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-192-cfb1",      24,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-256-cfb1",      32,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"chacha20",          32,   16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    // stream: tcp stream first rand bytes is iv
+    {"table",              0,    0,   0, NULL, _("table",               CCAlgorithmInvalid) },
+    {"rc4",               16,    0,   0, NULL, _("ARC4-128",            CCAlgorithmRC4)     },
+    {"rc4-md5",           16,   16,   0, NULL, _("ARC4-128",            CCAlgorithmRC4)     },
+    {"aes-128-cfb",       16,   16,   0, NULL, _("AES-128-CFB128",      CCAlgorithmAES)     },
+    {"aes-192-cfb",       24,   16,   0, NULL, _("AES-192-CFB128",      CCAlgorithmAES)     },
+    {"aes-256-cfb",       32,   16,   0, NULL, _("AES-256-CFB128",      CCAlgorithmAES)     },
+    {"bf-cfb",            16,    8,   0, NULL, _("BLOWFISH-CFB64",      CCAlgorithmBlowfish)},
+    {"camellia-128-cfb",  16,   16,   0, NULL, _("CAMELLIA-128-CFB128", CCAlgorithmInvalid) },
+    {"camellia-192-cfb",  24,   16,   0, NULL, _("CAMELLIA-192-CFB128", CCAlgorithmInvalid) },
+    {"camellia-256-cfb",  32,   16,   0, NULL, _("CAMELLIA-256-CFB128", CCAlgorithmInvalid) },
+    {"cast5-cfb",         16,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmCAST)    },
+    {"des-cfb",            8,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmDES)     },
+    {"idea-cfb",          16,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"rc2-cfb",           16,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmRC2)     },
+    {"seed-cfb",          16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-128-ofb",       16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-ofb",       24,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-ofb",       32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-128-ctr",       16,   16,   0, NULL, _("AES-128-CTR",         CCAlgorithmInvalid) },
+    {"aes-192-ctr",       24,   16,   0, NULL, _("AES-192-CTR",         CCAlgorithmInvalid) },
+    {"aes-256-ctr",       32,   16,   0, NULL, _("AES-256-CTR",         CCAlgorithmInvalid) },
+    {"aes-128-cfb8",      16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-cfb8",      24,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-cfb8",      32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-128-cfb1",      16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-cfb1",      24,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-cfb1",      32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"chacha20",          32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    // AEAD: tcp stream first rand bytes = key len
+    {"aes-128-gcm",       16,   12,  16, NULL, _("AES-128-GCM",         CCAlgorithmInvalid) },
+    {"aes-192-gcm",       24,   12,  16, NULL, _("AES-192-GCM",         CCAlgorithmInvalid) },
+    {"aes-256-gcm",       32,   12,  16, NULL, _("AES-256-GCM",         CCAlgorithmInvalid) },
+    {"aes-128-ocb",       16,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-ocb",       24,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-ocb",       32,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"chacha20-poly1305", 32,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
 };
 
 #undef _
@@ -215,6 +229,16 @@ static void merge_sort(uint8_t array[], int length,
 int enc_get_iv_len()
 {
     return supported_ciphers[enc_method].iv_size;
+}
+
+int enc_get_key_len()
+{
+    return supported_ciphers[enc_method].key_size;
+}
+
+int enc_get_tag_len()
+{
+    return supported_ciphers[enc_method].tag_size;
 }
 
 unsigned char *enc_md5(const unsigned char *d, size_t n, unsigned char *md)
@@ -894,6 +918,7 @@ void enc_ctx_init(int method, struct enc_ctx *ctx, int enc)
 {
     memset(ctx, 0, sizeof(struct enc_ctx));
     cipher_context_init(&ctx->evp, method, enc);
+    ctx->aead = supported_ciphers[method].tag_size > 0;
 }
 
 void enc_key_init(int method, const char *pass)
@@ -904,7 +929,7 @@ void enc_key_init(int method, const char *pass)
     }
 
 #if defined(USE_CRYPTO_OPENSSL)
-    OpenSSL_add_all_algorithms();
+    OpenSSL_add_all_ciphers();
 #endif
 
 #if defined(USE_CRYPTO_MBEDTLS) && defined(USE_CRYPTO_APPLECC)
@@ -990,5 +1015,489 @@ void enc_print_all_methods(char *buf, size_t len)
         }
     }
 }
+
+/* --------------- AEAD --------------- */
+
+// increment little-endian encoded unsigned integer b. Wrap around on overflow.
+static void nonce_increment(uint8_t *b, size_t len) {
+    int i = 0;
+    for (i = 0; i < len; ++i) {
+        b[i]++;
+        if (b[i] != 0) {
+            return;
+        }
+    }
+}
+
+static int
+aead_cipher_encrypt(cipher_ctx_t *cipher_ctx,
+uint8_t *output,
+size_t *olen,
+uint8_t *input,
+size_t ilen,
+uint8_t *ad,
+size_t adlen,
+uint8_t *n,
+uint8_t *k)
+{
+    int err = CRYPTO_OK;
+
+    size_t nlen = supported_ciphers[enc_method].iv_size;
+    size_t tlen = supported_ciphers[enc_method].tag_size;
+
+    switch (enc_method) {
+    case AES_128_GCM:
+    case AES_192_GCM:
+    case AES_256_GCM:
+#if USE_CRYPTO_OPENSSL
+    case AES_128_OCB:
+    case AES_192_OCB:
+    case AES_256_OCB:
+    case CHACHA20_IETF_POLY1305:
+    {
+        int len = 0;
+        if (1 != EVP_CipherInit_ex(cipher_ctx->evp, NULL, NULL, NULL, n, 1))
+            return CRYPTO_ERROR;
+
+        //EVP_EncryptUpdate(cipher_ctx->evp, NULL, &len, ad, adlen);
+
+        if (1 != EVP_EncryptUpdate(cipher_ctx->evp, output, &len, input, ilen))
+            return CRYPTO_ERROR;
+        *olen = len;
+
+        /* Finalize the encryption. Normally ciphertext bytes may be written at
+        * this stage, but this does not occur in GCM mode
+        */
+        if (1 != EVP_EncryptFinal_ex(cipher_ctx->evp, output + *olen, &len)) 
+            return CRYPTO_ERROR;
+        *olen += len;
+
+        /* Get the tag */
+        if (1 != EVP_CIPHER_CTX_ctrl(cipher_ctx->evp, EVP_CTRL_AEAD_GET_TAG, tlen, output + *olen))
+            return CRYPTO_ERROR;
+        *olen += tlen;
+        err = CRYPTO_OK;
+    }
+
+#elif USE_CRYPTO_MBEDTLS
+        err = mbedtls_cipher_auth_encrypt(&cipher_ctx->evp, n, nlen, ad, adlen,
+            input, ilen, output, olen, output + ilen, tlen);
+        *olen += tlen;
+#endif
+        break;
+    default:
+        return CRYPTO_ERROR;
+    }
+
+    return err;
+}
+
+static int
+aead_cipher_decrypt(cipher_ctx_t *cipher_ctx,
+uint8_t *output, size_t *olen,
+uint8_t *input, size_t ilen,
+uint8_t *ad, size_t adlen,
+uint8_t *n, uint8_t *k)
+{
+    int err = CRYPTO_ERROR;
+
+    size_t nlen = supported_ciphers[enc_method].iv_size;
+    size_t tlen = supported_ciphers[enc_method].tag_size;
+
+    switch (enc_method) {
+    case AES_128_GCM:
+    case AES_192_GCM:
+    case AES_256_GCM:
+
+#if USE_CRYPTO_OPENSSL
+    case AES_128_OCB:
+    case AES_192_OCB:
+    case AES_256_OCB:
+    case CHACHA20_IETF_POLY1305:
+    {
+        int len = 0;
+        if (1 != EVP_CipherInit_ex(cipher_ctx->evp, NULL, NULL, NULL, n, 0))
+            return CRYPTO_ERROR;
+
+        /* Set the tag */
+        if (1 != EVP_CIPHER_CTX_ctrl(cipher_ctx->evp, EVP_CTRL_AEAD_SET_TAG, tlen, input + ilen - tlen))
+            return CRYPTO_ERROR;
+
+        //EVP_DecryptUpdate(cipher_ctx->evp, NULL, &len, ad, adlen);
+
+        if (1 != EVP_DecryptUpdate(cipher_ctx->evp, output, &len, input, ilen - tlen))
+            return CRYPTO_ERROR;
+        *olen = len;
+
+        /* Finalize the decryption. A positive return value indicates success,
+        * anything else is a failure - the plaintext is not trustworthy.
+        */
+        if (1 != EVP_DecryptFinal_ex(cipher_ctx->evp, output + *olen, &len))
+            return CRYPTO_ERROR;
+        *olen += len;
+        err = CRYPTO_OK;
+    }
+
+#elif USE_CRYPTO_MBEDTLS
+        err = mbedtls_cipher_auth_decrypt(&cipher_ctx->evp, n, nlen, ad, adlen,
+            input, ilen - tlen, output, olen, input + ilen - tlen, tlen);
+#endif
+        break;
+    default:
+        return CRYPTO_ERROR;
+    }
+
+    return err;
+}
+
+#define SUBKEY_INFO "ss-subkey"
+#if USE_CRYPTO_MBEDTLS
+int crypto_hkdf_extract(const mbedtls_md_info_t *md, const unsigned char *salt,
+    size_t salt_len, const unsigned char *ikm, size_t ikm_len,
+    unsigned char *prk);
+int crypto_hkdf_expand(const mbedtls_md_info_t *md, const unsigned char *prk,
+    size_t prk_len, const unsigned char *info, size_t info_len,
+    unsigned char *okm, size_t okm_len);
+#endif
+
+/* HKDF-Extract + HKDF-Expand */
+int crypto_hkdf(const unsigned char *salt,
+    size_t salt_len, const unsigned char *ikm, size_t ikm_len,
+    const unsigned char *info, size_t info_len, unsigned char *okm,
+    size_t okm_len)
+{
+#if USE_CRYPTO_OPENSSL
+    EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
+    if (pctx == NULL) {
+        FATAL("Cannot create hkdf context");
+    }
+
+    if (EVP_PKEY_derive_init(pctx) <= 0 ||
+        EVP_PKEY_CTX_set_hkdf_md(pctx, EVP_sha1()) <= 0 ||
+        EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt, salt_len) <= 0 ||
+        EVP_PKEY_CTX_set1_hkdf_key(pctx, ikm, ikm_len) <= 0 ||
+        EVP_PKEY_CTX_add1_hkdf_info(pctx, SUBKEY_INFO, strlen(SUBKEY_INFO)) <= 0) {
+        FATAL("Cannot setup hkdf context");
+    }
+    // Since the HKDF output length is variable, passing a NULL buffer as a means 
+    // to obtain the requisite length is not meaningful with HKDF
+    if (EVP_PKEY_derive(pctx, okm, &okm_len) <= 0) {
+        FATAL("Derive hkdf key failed");
+    }
+    assert(okm_len == supported_ciphers[enc_method].key_size);
+    EVP_PKEY_CTX_free(pctx);
+    return 0;
+#else
+    const digest_type_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA1);
+    if (md == NULL) {
+        FATAL("SHA1 Digest not found in crypto library");
+    }
+# if MBEDTLS_VERSION_NUMBER >= 0x020B0000
+    return mbedtls_hkdf(md, salt, salt_len, ikm, ikm_len, info, info_len, okm, okm_len);
+# else
+    unsigned char prk[MBEDTLS_MD_MAX_SIZE];
+    return crypto_hkdf_extract(md, salt, salt_len, ikm, ikm_len, prk) ||
+        crypto_hkdf_expand(md, prk, mbedtls_md_get_size(md), info, info_len,
+        okm, okm_len);
+# endif
+#endif
+}
+
+static void
+aead_cipher_ctx_set_key(cipher_ctx_t *cipher_ctx, int enc)
+{
+    int err = crypto_hkdf(
+        cipher_ctx->salt, supported_ciphers[enc_method].key_size,
+        enc_key, supported_ciphers[enc_method].key_size,
+        (uint8_t *)SUBKEY_INFO, strlen(SUBKEY_INFO),
+        cipher_ctx->skey, supported_ciphers[enc_method].key_size);
+    if (err) {
+        FATAL("Unable to generate subkey");
+    }
+
+#if USE_CRYPTO_OPENSSL
+    if (!EVP_CipherInit_ex(cipher_ctx->evp, supported_ciphers[enc_method].cipher, NULL, cipher_ctx->skey, NULL, enc)) {
+        FATAL("Cannot set hkdf derived key");
+    }
+    if (!EVP_CIPHER_CTX_ctrl(cipher_ctx->evp, EVP_CTRL_AEAD_SET_IVLEN, supported_ciphers[enc_method].iv_size, NULL)) {
+        FATAL("Cannot set aead iv length");
+    }
+
+#elif USE_CRYPTO_MBEDTLS
+    if (mbedtls_cipher_setkey(&cipher_ctx->evp, cipher_ctx->skey,
+        supported_ciphers[enc_method].key_size * 8, enc) != 0) {
+        FATAL("Cannot set mbed TLS cipher key");
+    }
+    if (mbedtls_cipher_reset(&cipher_ctx->evp) != 0) {
+        FATAL("Cannot finish preparation of mbed TLS cipher context");
+    }
+#endif
+
+    memset(cipher_ctx->nonce, 0, supported_ciphers[enc_method].iv_size);
+    //LOGD("enc %d skey:", enc);
+    //hexdump(stdout, cipher_ctx->skey, outlen);
+}
+
+static int
+aead_chunk_encrypt(cipher_ctx_t *ctx, uint8_t *p, uint8_t *c,
+uint8_t *n, uint16_t plen)
+{
+    size_t nlen = supported_ciphers[enc_method].iv_size;
+    size_t tlen = supported_ciphers[enc_method].tag_size;
+
+    assert(plen <= CHUNK_SIZE_MASK);
+
+    int err;
+    size_t clen;
+    uint8_t len_buf[CHUNK_SIZE_LEN];
+    uint16_t t = htons(plen & CHUNK_SIZE_MASK);
+    memcpy(len_buf, &t, CHUNK_SIZE_LEN);
+
+    clen = CHUNK_SIZE_LEN + tlen;
+    err = aead_cipher_encrypt(ctx, c, &clen, len_buf, CHUNK_SIZE_LEN,
+        NULL, 0, n, ctx->skey);
+    if (err)
+        return CRYPTO_ERROR;
+
+    assert(clen == CHUNK_SIZE_LEN + tlen);
+
+    nonce_increment(n, nlen);
+
+    clen = plen + tlen;
+    err = aead_cipher_encrypt(ctx, c + CHUNK_SIZE_LEN + tlen, &clen, p, plen,
+        NULL, 0, n, ctx->skey);
+    if (err)
+        return CRYPTO_ERROR;
+
+    assert(clen == plen + tlen);
+
+    nonce_increment(n, nlen);
+
+    return CRYPTO_OK;
+}
+
+/* TCP */
+int
+aead_encrypt(char *ciphertext, char *plaintext, ssize_t *len, struct enc_ctx *ctx)
+{
+    if (*len == 0) {
+        return CRYPTO_OK;
+    }
+
+    int err = CRYPTO_ERROR;
+    size_t salt_ofst = 0;
+    size_t salt_len = enc_get_key_len();
+    size_t tag_len = enc_get_tag_len();
+
+    if (!ctx->init) {
+        salt_ofst = salt_len;
+    }
+
+    // TODO: loop
+    if (*len > CHUNK_SIZE_MASK) {
+        *len = CHUNK_SIZE_MASK;
+    }
+
+    size_t out_len = salt_ofst + 2 * tag_len + *len + CHUNK_SIZE_LEN;
+
+    if (!ctx->init) {
+        rand_bytes(ctx->evp.salt, salt_len);
+        memcpy(ciphertext, ctx->evp.salt, salt_len);
+        aead_cipher_ctx_set_key(&ctx->evp, 1);
+        ctx->init = 1;
+    }
+
+    err = aead_chunk_encrypt(&ctx->evp,
+        (uint8_t *)plaintext,
+        (uint8_t *)ciphertext + salt_ofst,
+        ctx->evp.nonce, *len);
+    if (err)
+        return err;
+
+    return out_len;
+}
+
+static int
+aead_chunk_decrypt(cipher_ctx_t *ctx, uint8_t *p, uint8_t *c, uint8_t *n,
+size_t *plen, size_t *clen)
+{
+    int err;
+    size_t mlen;
+    size_t nlen = supported_ciphers[enc_method].iv_size;
+    size_t tlen = supported_ciphers[enc_method].tag_size;
+
+    if (*clen <= 2 * tlen + CHUNK_SIZE_LEN)
+        return CRYPTO_NEED_MORE;
+
+    uint8_t len_buf[2];
+    err = aead_cipher_decrypt(ctx, len_buf, plen, c, CHUNK_SIZE_LEN + tlen,
+        NULL, 0, n, ctx->skey);
+    if (err)
+        return CRYPTO_ERROR;
+    assert(*plen == CHUNK_SIZE_LEN);
+
+    mlen = ntohs(*(uint16_t *)len_buf);
+    mlen = mlen & CHUNK_SIZE_MASK;
+
+    if (mlen == 0)
+        return CRYPTO_ERROR;
+
+    size_t chunk_len = 2 * tlen + CHUNK_SIZE_LEN + mlen;
+
+    if (*clen < chunk_len)
+        return CRYPTO_NEED_MORE;
+
+    nonce_increment(n, nlen);
+
+    err = aead_cipher_decrypt(ctx, p, plen, c + CHUNK_SIZE_LEN + tlen, mlen + tlen,
+        NULL, 0, n, ctx->skey);
+    if (err)
+        return CRYPTO_ERROR;
+    assert(*plen == mlen);
+
+    nonce_increment(n, nlen);
+
+    *clen = chunk_len;
+
+    return CRYPTO_OK;
+}
+
+int
+aead_decrypt(char *plaintext, char *ciphertext, ssize_t *len, struct enc_ctx *ctx)
+{
+    int err = CRYPTO_OK;
+    int remain = *len;
+    size_t salt_len = enc_get_key_len();
+
+    if (!ctx->init) {
+        if (*len <= salt_len)
+            return 0;// CRYPTO_NEED_MORE;
+
+        memcpy(ctx->evp.salt, ciphertext, salt_len);
+
+        aead_cipher_ctx_set_key(&ctx->evp, 0);
+
+        remain -= salt_len;
+
+        ctx->init = 1;
+
+    }
+
+    size_t plen = 0;
+    while (remain > 0) {
+        size_t chunk_clen = remain;
+        size_t chunk_plen = 0;
+        err = aead_chunk_decrypt(&ctx->evp,
+            (uint8_t *)plaintext + plen,
+            (uint8_t *)ciphertext + (*len - remain),
+            ctx->evp.nonce, &chunk_plen, &chunk_clen);
+        if (err == CRYPTO_ERROR) {
+            return err;
+        }
+        else if (err == CRYPTO_NEED_MORE) {
+                break;
+        }
+        remain -= chunk_clen;
+        plen += chunk_plen;
+    }
+
+    *len = *len - remain; // consumed cipher text
+
+    return plen;
+}
+
+#if defined(USE_CRYPTO_MBEDTLS) && MBEDTLS_VERSION_NUMBER < 0x020B0000
+/* HKDF-Extract(salt, IKM) -> PRK */
+int crypto_hkdf_extract(const mbedtls_md_info_t *md, const unsigned char *salt,
+    size_t salt_len, const unsigned char *ikm, size_t ikm_len,
+    unsigned char *prk)
+{
+    unsigned char null_salt[MBEDTLS_MD_MAX_SIZE] = { '\0' };
+
+    if (salt == NULL) {
+        size_t hash_len = mbedtls_md_get_size(md);
+        if (hash_len == 0) {
+            return CRYPTO_ERROR;
+        }
+
+        salt = null_salt;
+        salt_len = hash_len;
+    }
+
+    return mbedtls_md_hmac(md, salt, salt_len, ikm, ikm_len, prk);
+}
+
+/* HKDF-Expand(PRK, info, L) -> OKM */
+int crypto_hkdf_expand(const mbedtls_md_info_t *md, const unsigned char *prk,
+    size_t prk_len, const unsigned char *info, size_t info_len,
+    unsigned char *okm, size_t okm_len)
+{
+    size_t hash_len;
+    size_t N;
+    size_t T_len = 0, where = 0, i;
+    int ret;
+    mbedtls_md_context_t ctx;
+    unsigned char T[MBEDTLS_MD_MAX_SIZE];
+
+    if (okm == NULL) {
+        return CRYPTO_ERROR;
+    }
+
+    hash_len = mbedtls_md_get_size(md);
+
+    if (prk_len < hash_len || hash_len == 0) {
+        return CRYPTO_ERROR;
+    }
+
+    if (info == NULL) {
+        info = (const unsigned char *)"";
+        info_len = 0;
+    }
+
+    N = okm_len / hash_len;
+
+    if ((okm_len % hash_len) != 0) {
+        N++;
+    }
+
+    if (N > 255) {
+        return CRYPTO_ERROR;
+    }
+
+    mbedtls_md_init(&ctx);
+
+    if ((ret = mbedtls_md_setup(&ctx, md, 1)) != 0) {
+        mbedtls_md_free(&ctx);
+        return ret;
+    }
+
+    /* Section 2.3. */
+    for (i = 1; i <= N; i++) {
+        unsigned char c = i;
+
+        ret = mbedtls_md_hmac_starts(&ctx, prk, prk_len) ||
+            mbedtls_md_hmac_update(&ctx, T, T_len) ||
+            mbedtls_md_hmac_update(&ctx, info, info_len) ||
+            /* The constant concatenated to the end of each T(n) is a single
+            octet. */
+            mbedtls_md_hmac_update(&ctx, &c, 1) ||
+            mbedtls_md_hmac_finish(&ctx, T);
+
+        if (ret != 0) {
+            mbedtls_md_free(&ctx);
+            return ret;
+        }
+
+        memcpy(okm + where, T, (i != N) ? hash_len : (okm_len - where));
+        where += hash_len;
+        T_len = hash_len;
+    }
+
+    mbedtls_md_free(&ctx);
+
+    return 0;
+}
+
+#endif
 
 #endif

@@ -25,7 +25,7 @@ Currently HTTPS proxy is only supported by a few clients, eg. Chrome, Firefox 31
 # Installation #
 
 ### Install required development components
-_libevent 2.0.12+_ (except [libevent 2.0.22 stable](https://github.com/libevent/libevent/issues/335)),  _OpenSSL or mbed TLS_ (optional)
+_libevent 2.0.12+_ (except [libevent 2.0.22 stable](https://github.com/libevent/libevent/issues/335)),  _OpenSSL 1.1.0+ or mbed TLS_ (optional)
 
 Win32 require _VC++ 2013/2015_ or _MinGW-w64 and MSYS_ . 
 
@@ -36,7 +36,7 @@ Linux require _cmake_ or _scons_.
 * MinGW 
 >make -f Makefile.mingw
 
-* VC++ 2013/2015
+* VC++ 2013/2015/2017
 open the _proxy.vcxproj_ directly, set your libevent and openssl directories then compile
 
 #### Linux
@@ -68,12 +68,16 @@ open the _proxy.vcxproj_ directly, set your libevent and openssl directories the
       -V                    show version number and quit
       -h                    show help
     Supported encryption methods for shadowsocks:
-      table, rc4, rc4-md5, aes-128-cfb, aes-192-cfb, aes-256-cfb, 
-      bf-cfb, camellia-128-cfb, camellia-192-cfb, camellia-256-cfb, 
-      cast5-cfb, des-cfb, idea-cfb, rc2-cfb, seed-cfb, aes-128-ofb, 
-      aes-192-ofb, aes-256-ofb, aes-128-ctr, aes-192-ctr, aes-256-ctr, 
-      aes-128-cfb8, aes-192-cfb8, aes-256-cfb8, aes-128-cfb1, 
-      aes-192-cfb1, aes-256-cfb1
+      Stream Cipher:
+        table, rc4, rc4-md5, aes-128-cfb, aes-192-cfb, aes-256-cfb, 
+        bf-cfb, camellia-128-cfb, camellia-192-cfb, camellia-256-cfb, 
+        cast5-cfb, des-cfb, idea-cfb, rc2-cfb, seed-cfb, aes-128-ofb, 
+        aes-192-ofb, aes-256-ofb, aes-128-ctr, aes-192-ctr, aes-256-ctr, 
+        aes-128-cfb8, aes-192-cfb8, aes-256-cfb8, aes-128-cfb1, 
+        aes-192-cfb1, aes-256-cfb1
+      AEAD Cipher:
+        chacha20-ietf-poly1305, aes-128-gcm, aes-192-gcm, aes-256-gcm,
+        aes-128-ocb, aes-192-ocb, aes-256-ocb
 
 
 ### Examples
