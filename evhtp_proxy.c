@@ -33,7 +33,7 @@
 # define ENABLE_HTTPS_PROXY
 #endif
 
-#define PROGRAM_VERSION "0.5"
+#define PROGRAM_VERSION "0.6"
 #define DEFAULT_LISTEN_PORT 8081
 #define DEFAULT_BIND_ADDRESS "0.0.0.0"
 #define DEFAULT_SOCKS5_PORT 1080
@@ -481,8 +481,8 @@ void usage(const char *program)
         "  --pid-file <path>     pid file\n"
 #endif
 #ifdef ENABLE_HTTPS_PROXY
-        "  --ssl_certificate <fullchain.pem>   set ssl certificate\n"
-        "  --ssl_certificate_key <privkey.pem> set ssl private key\n"
+        "  --ssl-certificate <fullchain.pem>   set ssl certificate\n"
+        "  --ssl-certificate-key <privkey.pem> set ssl private key\n"
 #endif
 #ifdef TCP_NODELAY
         "  --tcp-nodelay         enable TCP NODELAY\n"
@@ -541,8 +541,11 @@ main(int argc, char ** argv) {
         {"pid-file", required_argument, NULL, OPTION_PID_FILE},
 #endif
 #ifdef ENABLE_HTTPS_PROXY
+	// for compatible only
         {"ssl_certificate", required_argument, NULL, OPTION_SSL_CERTIFICATE},
         {"ssl_certificate_key", required_argument, NULL, OPTION_SSL_CERTIFICATE_KEY},
+        {"ssl-certificate", required_argument, NULL, OPTION_SSL_CERTIFICATE},
+        {"ssl-certificate-key", required_argument, NULL, OPTION_SSL_CERTIFICATE_KEY},
 #endif
 #ifdef TCP_NODELAY
         {"tcp-nodelay", no_argument, NULL, OPTION_TCP_NODELAY},
