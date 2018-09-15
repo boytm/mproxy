@@ -17,6 +17,7 @@ environment:
     - ENABLE_SS: OFF
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: OFF
+      CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
       BUILD_SUFFIX: "vc2017_x64"
       BITS: 64
 
@@ -24,9 +25,10 @@ environment:
     - ENABLE_SS: ON
       USE_CRYPTO_OPENSSL: ON
       USE_CRYPTO_MBEDTLS: OFF
+      CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
       BUILD_SUFFIX: "openssl_vc2017_x64"
       BITS: 64
-      OPENSSL_VERSION: 1_1_0h
+      OPENSSL_VERSION: 1_1_0i
       OPENSSL_DIR: C:\OpenSSL
       OPENSSL_ROOT_DIR: C:\OpenSSL
 
@@ -34,9 +36,19 @@ environment:
     - ENABLE_SS: ON
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: ON
-      MBEDTLS_VERSION: 2.7.5
+      MBEDTLS_VERSION: 2.7.6
+      CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
       BUILD_SUFFIX: "mbedtls_vc2017_x64"
       BITS: 64
+
+    # x86 build with mbed TLS library
+    - ENABLE_SS: ON
+      USE_CRYPTO_OPENSSL: OFF
+      USE_CRYPTO_MBEDTLS: ON
+      MBEDTLS_VERSION: 2.7.6
+      CMAKE_GENERATOR: "Visual Studio 15 2017"
+      BUILD_SUFFIX: "mbedtls_vc2017_x86"
+      BITS: 32
 
     # build https proxy with openssl library
     #- ENABLE_SS: ON
@@ -64,7 +76,7 @@ install:
 - if defined MBEDTLS_VERSION mkdir lib
 - if defined MBEDTLS_VERSION mkdir cmake-build
 - if defined MBEDTLS_VERSION cd cmake-build
-- if defined MBEDTLS_VERSION cmake -G "Visual Studio 15 2017 Win64" .. 
+- if defined MBEDTLS_VERSION cmake -G "%CMAKE_GENERATOR%" .. 
 - if defined MBEDTLS_VERSION cmake --build . --config Release --target mbedtls
 - if defined MBEDTLS_VERSION move library\Release\*.lib ..\lib\
   # Libevent
@@ -91,7 +103,7 @@ build_script:
 - set PATH=C:\Python27-x64\scripts;C:\Python27-x64;%PATH%
 - mkdir cmake-build
 - cd cmake-build
-- cmake -G "Visual Studio 15 2017 Win64" -DENABLE_HTTPS_PROXY:STRING="%ENABLE_HTTPS_PROXY%" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-2.1.8-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-%MBEDTLS_VERSION% -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
+- cmake -G "%CMAKE_GENERATOR%" -DENABLE_HTTPS_PROXY:STRING="%ENABLE_HTTPS_PROXY%" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-2.1.8-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-%MBEDTLS_VERSION% -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
 - cmake --build . --config Release
 # TODO: 
 # - cpack

@@ -19,7 +19,7 @@ env:
   - ENABLE_SS: ON
     USE_CRYPTO_OPENSSL: OFF
     USE_CRYPTO_MBEDTLS: ON
-    MBEDTLS_VERSION: 2.1.14
+    MBEDTLS_VERSION: 2.1.15
 
   # build https proxy with openssl library
   - ENABLE_SS: ON
