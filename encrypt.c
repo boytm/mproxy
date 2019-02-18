@@ -123,9 +123,9 @@ static struct {
     {"idea-cfb",          16,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     {"rc2-cfb",           16,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmRC2)     },
     {"seed-cfb",          16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-128-ofb",       16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-192-ofb",       24,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-256-ofb",       32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-128-ofb",       16,   16,   0, NULL, _("AES-128-OFB",         CCAlgorithmInvalid) },
+    {"aes-192-ofb",       24,   16,   0, NULL, _("AES-192-OFB",         CCAlgorithmInvalid) },
+    {"aes-256-ofb",       32,   16,   0, NULL, _("AES-256-OFB",         CCAlgorithmInvalid) },
     {"aes-128-ctr",       16,   16,   0, NULL, _("AES-128-CTR",         CCAlgorithmInvalid) },
     {"aes-192-ctr",       24,   16,   0, NULL, _("AES-192-CTR",         CCAlgorithmInvalid) },
     {"aes-256-ctr",       32,   16,   0, NULL, _("AES-256-CTR",         CCAlgorithmInvalid) },
@@ -135,7 +135,8 @@ static struct {
     {"aes-128-cfb1",      16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     {"aes-192-cfb1",      24,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     {"aes-256-cfb1",      32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"chacha20",          32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    // ss quivalent chacha20-ietf
+    {"chacha20",          32,   12,   0, NULL, _("CHACHA20",            CCAlgorithmInvalid) },
     // AEAD: tcp stream first rand bytes = key len
     {"aes-128-gcm",       16,   12,  16, NULL, _("AES-128-GCM",         CCAlgorithmInvalid) },
     {"aes-192-gcm",       24,   12,  16, NULL, _("AES-192-GCM",         CCAlgorithmInvalid) },
@@ -143,7 +144,8 @@ static struct {
     {"aes-128-ocb",       16,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     {"aes-192-ocb",       24,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     {"aes-256-ocb",       32,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"chacha20-poly1305", 32,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    // ss quivalent chacha20-ietf-poly1305
+    {"chacha20-poly1305", 32,   12,  16, NULL, _("CHACHA20-POLY1305",   CCAlgorithmInvalid) },
 };
 
 #undef _
@@ -998,7 +1000,7 @@ void enc_print_all_methods(char *buf, size_t len)
         const char *ciphername = supported_ciphers[m].name;
         if (ciphername
 #ifdef USE_CRYPTO_MBEDTLS
-                && supported_ciphers[m].cipher_mbedtls != CIPHER_UNSUPPORTED
+                && strcmp(supported_ciphers[m].cipher_mbedtls, CIPHER_UNSUPPORTED)
 #endif
 #ifdef USE_CRYPTO_APPLECC
                 && supported_ciphers[m].cipher_applecc != CCAlgorithmInvalid
@@ -1046,6 +1048,7 @@ uint8_t *k)
     size_t tlen = supported_ciphers[enc_method].tag_size;
 
     switch (enc_method) {
+    case CHACHA20_IETF_POLY1305:
     case AES_128_GCM:
     case AES_192_GCM:
     case AES_256_GCM:
@@ -1053,7 +1056,6 @@ uint8_t *k)
     case AES_128_OCB:
     case AES_192_OCB:
     case AES_256_OCB:
-    case CHACHA20_IETF_POLY1305:
     {
         int len = 0;
         if (1 != EVP_CipherInit_ex(cipher_ctx->evp, NULL, NULL, NULL, n, 1))
@@ -1105,6 +1107,7 @@ uint8_t *n, uint8_t *k)
     size_t tlen = supported_ciphers[enc_method].tag_size;
 
     switch (enc_method) {
+    case CHACHA20_IETF_POLY1305:
     case AES_128_GCM:
     case AES_192_GCM:
     case AES_256_GCM:
@@ -1113,7 +1116,6 @@ uint8_t *n, uint8_t *k)
     case AES_128_OCB:
     case AES_192_OCB:
     case AES_256_OCB:
-    case CHACHA20_IETF_POLY1305:
     {
         int len = 0;
         if (1 != EVP_CipherInit_ex(cipher_ctx->evp, NULL, NULL, NULL, n, 0))
