@@ -51,7 +51,7 @@ if not env.GetOption('clean'):
         conf.env.Append(CPPDEFINES = ['NO_STRNDUP'])
     if not conf.CheckFunc('strnlen'):
         conf.env.Append(CPPDEFINES = ['NO_STRNLEN'])
-    if conf.CheckHeader('openssl/evp.h'):
+    if conf.CheckHeader('openssl/evp.h') and conf.CheckHeader('openssl/kdf.h'):
         conf.env.Append(CPPDEFINES = ['USE_CRYPTO_OPENSSL', 'ENABLE_SS'])
     if conf.CheckFunc('strerror_r'):
         conf.env.Append(CPPDEFINES = ['HAVE_STRERROR_R'])
@@ -91,3 +91,4 @@ evhtp_proxy = env.Program('mproxy', Split('evhtp_proxy.c evhtp_sock_relay.c lru.
 env.Install('/usr/local/bin', evhtp_proxy)
 env.Alias('install', '/usr/local/bin')
 
+# vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4

@@ -62,7 +62,7 @@ if (MSVC)
 endif()
 
 if (USE_CRYPTO_OPENSSL)
-	find_package(OpenSSL)
+    find_package(OpenSSL 1.1.0)
     if (OPENSSL_FOUND)
         include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
         add_definitions(-DUSE_CRYPTO_OPENSSL=1)
@@ -110,3 +110,5 @@ message(STATUS "${Blue}ENABLE_HTTPS_PROXY${ColourReset}         : " ${BoldRed}${
 message(STATUS "${Blue}ENABLE_SS${ColourReset}                  : " ${BoldRed}${ENABLE_SS}${ColourReset})
 message(STATUS "${Blue}USE_CRYPTO_OPENSSL${ColourReset}         : " ${BoldRed}${USE_CRYPTO_OPENSSL}${ColourReset})
 message(STATUS "${Blue}USE_CRYPTO_MBEDTLS${ColourReset}         : " ${BoldRed}${USE_CRYPTO_MBEDTLS}${ColourReset})
+
+# vim:set sts=4 sw=4 tw=0 et:
