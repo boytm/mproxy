@@ -58,9 +58,11 @@ int use_syslog = 0;
 int g_enable_nodelay = 0;
 
 enum upstream_mode {
-    UPSTREAM_TCP,    /* TCP */
-    UPSTREAM_SOCKS5, /* SOCKS5 */
-    UPSTREAM_SS,     /* SHADOWSOCKS */
+	UPSTREAM_TCP,
+	UPSTREAM_SOCKS5,
+    UPSTREAM_HTTP,
+    UPSTREAM_HTTPS,
+	UPSTREAM_SS,
 };
 enum upstream_mode g_upstream_mode = UPSTREAM_TCP;
 
@@ -73,6 +75,12 @@ static const char* upstream_mode_to_str(enum upstream_mode mode)
     case UPSTREAM_SOCKS5:
         return "SOCKS5";
 
+    case UPSTREAM_HTTP:
+        return "HTTP";
+
+    case UPSTREAM_HTTPS:
+        return "HTTPS";
+
     case UPSTREAM_SS:
         return "SS";
 
@@ -83,15 +91,27 @@ static const char* upstream_mode_to_str(enum upstream_mode mode)
 
 void connect_upstream(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg)
 {
+    switch (g_upstream_mode)
+    {
+    case UPSTREAM_TCP:
+        /* fallthrough */
+    case UPSTREAM_SOCKS5:
+        return connect_socks5(evbase, evdns_base, hostname, port, cb, arg);
+
+    case UPSTREAM_HTTP:
+        /* fallthrough */
+    case UPSTREAM_HTTPS:
+        /* TODO: only for CONNECT method */
+        return connect_http(evbase, evdns_base, hostname, port, cb, arg);
+
 #ifdef ENABLE_SS
-    if (g_upstream_mode == UPSTREAM_SS) {
-        connect_ss(evbase, evdns_base, hostname, port, cb, arg);
-    } else {
+    case UPSTREAM_SS:
+        return connect_ss(evbase, evdns_base, hostname, port, cb, arg);
 #endif
-        connect_socks5(evbase, evdns_base, hostname, port, cb, arg);
-#ifdef ENABLE_SS
+    default:
+        LOGE("Unknown upstream");
+        cb(NULL, arg);
     }
-#endif
 }
 
 // error occur before read all headers

@@ -16,6 +16,8 @@ extern int g_enable_nodelay;
 
 typedef void (*connect_callback)(struct bufferevent *bev, void *arg);
 void connect_upstream(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg);
+/* HTTP or HTTPS */
+void connect_http(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg);
 
 /* shadowsocks */
 void connect_ss(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg);

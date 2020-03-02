@@ -20,7 +20,7 @@ CFLAGS:= -Wall -g -O2 -static -DNDEBUG -DNO_SYS_UN=1 -DENABLE_SS=1 \
 	$(addprefix -L , $(SYSLIB)) 
 
 sources:= evhtp_proxy.c evhtp_sock_relay.c connector.c lru.c log.c \
-	ss_connector.c encrypt.c \
+	ss_connector.c encrypt.c http_connector.c \
 	libevhtp/evhtp.c libevhtp/htparse.c libevhtp/evhtp_numtoa.c 
 objects:= $(addprefix obj/, $(sources:.c=.o))
 depends:= $(addprefix obj/, $(sources:.c=.d))
