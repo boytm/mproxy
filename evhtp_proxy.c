@@ -28,6 +28,7 @@
 #include "evhtp.h"
 
 #include "connector.h"
+#include "dns_forward.h"
 
 #ifndef EVHTP_DISABLE_SSL
 # define ENABLE_HTTPS_PROXY
@@ -528,6 +529,8 @@ enum {
     OPTION_SSL_CERTIFICATE_KEY,
     OPTION_TCP_NODELAY,
     OPTION_CLIENT_MAX_BODY_SIZE,
+    OPTION_DNS_FORWARDER_BIND_ADDRESS,
+    OPTION_DNS_FORWARDER_SERVER_ADDRESS,
 };
 
 int
@@ -539,6 +542,8 @@ main(int argc, char ** argv) {
     const char *password = NULL;
     const char *method = NULL;
     const char *name_server = NULL;
+    const char *dns_forwarder_bind_address = NULL;
+    const char *dns_forwarder_server_address = "1.1.1.1:53";
 #ifndef _WIN32
     const char *userspec = NULL;
     const char *pid_file = NULL;
@@ -569,6 +574,8 @@ main(int argc, char ** argv) {
         {"tcp-nodelay", no_argument, NULL, OPTION_TCP_NODELAY},
 #endif
         {"client-max-body-size", required_argument, NULL, OPTION_CLIENT_MAX_BODY_SIZE},
+        {"dns-forwarder-bind-address", required_argument, NULL, OPTION_DNS_FORWARDER_BIND_ADDRESS},
+        {"dns-forwarder-server", required_argument, NULL, OPTION_DNS_FORWARDER_SERVER_ADDRESS},
         {"help", no_argument, NULL, 'h'},
         {"verbose", no_argument, NULL, 'v'},
         {"version", no_argument, NULL, 'V'},
@@ -640,6 +647,12 @@ main(int argc, char ** argv) {
             break;
         case OPTION_CLIENT_MAX_BODY_SIZE:
             client_max_body_size = 1024 * 1024 * atof(optarg);
+            break;
+        case OPTION_DNS_FORWARDER_BIND_ADDRESS:
+            dns_forwarder_bind_address = optarg;
+            break;
+        case OPTION_DNS_FORWARDER_SERVER_ADDRESS:
+            dns_forwarder_server_address = optarg;
             break;
         case 'V':
             version(argv[0]);
@@ -716,6 +729,10 @@ main(int argc, char ** argv) {
 #endif
 
     lru_init(evbase);
+    struct dns_forwarder_t *dnsforwarder = NULL;
+    if (dns_forwarder_bind_address) {
+        dnsforwarder = dns_forwarder_new(evbase, evdns, dns_forwarder_bind_address, dns_forwarder_server_address);
+    }
 
 #ifndef _WIN32
     struct event *ev_sigterm;
@@ -753,6 +770,7 @@ main(int argc, char ** argv) {
 #endif
 
     evhtp_unbind_socket(evhtp);
+    dns_forwarder_free(dnsforwarder);
     lru_fini();
     evdns_base_free(evdns, 1);
     evhtp_free(evhtp);
