@@ -2,7 +2,6 @@
 #define __UTILS_H__
 
 #include <stdio.h>
-#include <time.h>
 #include "log.h"
 
 #ifndef _WIN32

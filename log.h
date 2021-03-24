@@ -2,6 +2,7 @@
 #define __LOG_H__
 
 #include <stdio.h>
+#include <time.h>
 
 #define __QUOTE(x)              # x
 #define  _QUOTE(x)              __QUOTE(x)

@@ -83,12 +83,12 @@ env.Program('evhtp_get', ['evhtp_get.c', ] + libevhtp_objs,
                 LIBS = libs,
                 LIBPATH = ['/usr/local/lib', '/usr/lib', ])
 
-evhtp_proxy = env.Program('mproxy', Split('evhtp_proxy.c evhtp_sock_relay.c lru.c dns_forward.c connector.c http_connector.c ss_connector.c encrypt.c utils.c log.c') + libevhtp_objs,
+mproxy = env.Program('mproxy', Split('evhtp_proxy.c evhtp_sock_relay.c lru.c dns_forward.c connector.c http_connector.c ss_connector.c encrypt.c utils.c log.c parse_forward_param.c') + libevhtp_objs,
 		CCFLAGS = env['CCFLAGS'] + ' ',
                 LIBS = libs,
                 LIBPATH = ['/usr/local/lib', '/usr/lib', ])
 
-env.Install('/usr/local/bin', evhtp_proxy)
+env.Install('/usr/local/bin', mproxy)
 env.Alias('install', '/usr/local/bin')
 
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4

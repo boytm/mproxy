@@ -22,6 +22,7 @@
 #include "connector.h"
 #include "log.h"
 #include "utils.h"
+#include "parse_forward_param.h"
 
 #ifdef __GNUC__
 # define PACK( __Declaration__ ) __Declaration__ __attribute__((__packed__))
@@ -354,29 +355,18 @@ void dns_forwarder_free(struct dns_forwarder_t *instance)
     free(instance);
 }
 
-struct dns_forwarder_t* dns_forwarder_new(struct event_base *evbase, struct evdns_base *evdns_base, const char *bindaddr, const char *dns_server)
+struct dns_forwarder_t* dns_forwarder_new(struct event_base *evbase, struct evdns_base *evdns_base, struct forwarder_param_t *param)
 {
     evutil_socket_t fd = -1;
     int             on = 1;
     int             error;
     int             i;
-    char           *pos;
+    char            bindaddr[INET6_ADDRSTRLEN + 6] = {0};
     dnsu2t_instance *instance = calloc(1, sizeof(dnsu2t_instance));
     instance->evdns_base = evdns_base;
-    pos = strrchr(dns_server, ':');
-    if (pos) {
-        instance->dns_server = strdup(dns_server);
-        instance->dns_server[pos - dns_server] = '\0';
-        int port = atoi(pos + 1);
-        if (port <= 0 || port > 65535) {
-            LOGE("invalid dns server address: %s", dns_server);
-            port = DEFAULT_DNS_SERVER_PORT;
-        }
-        instance->dns_server_port = port;
-    } else {
-        instance->dns_server = strdup(dns_server);
-        instance->dns_server_port = DEFAULT_DNS_SERVER_PORT;
-    }
+    instance->dns_server = strdup(param->forward_ip);
+    instance->dns_server_port = param->forward_port;
+    snprintf(bindaddr, sizeof(bindaddr) - 1, "%s:%hu", param->bind_ip, param->bind_port);
 
     // initialize RB_TREE and LIST
     for (i = 0; i < QID_BUCKET_SIZE; ++i){
@@ -420,7 +410,7 @@ struct dns_forwarder_t* dns_forwarder_new(struct event_base *evbase, struct evdn
         goto failed;
     }
 
-    LOGI("DNS forwarding listen at %s, forward to %s", bindaddr, dns_server);
+    LOGI("DNS forwarding listen at %s, forward to %s:%hu", bindaddr, instance->dns_server, instance->dns_server_port);
     return instance;
 
 failed:

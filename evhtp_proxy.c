@@ -29,6 +29,7 @@
 
 #include "connector.h"
 #include "dns_forward.h"
+#include "parse_forward_param.h"
 
 #ifndef EVHTP_DISABLE_SSL
 # define ENABLE_HTTPS_PROXY
@@ -500,13 +501,18 @@ void usage(const char *program)
         "  --pid-file <path>     pid file\n"
 #endif
 #ifdef ENABLE_HTTPS_PROXY
-        "  --ssl-certificate <fullchain.pem>   set ssl certificate\n"
-        "  --ssl-certificate-key <privkey.pem> set ssl private key\n"
+        "  --ssl-certificate <fullchain.pem> \n"
+        "                        set ssl certificate\n"
+        "  --ssl-certificate-key <privkey.pem> \n"
+        "                        set ssl private key\n"
 #endif
 #ifdef TCP_NODELAY
         "  --tcp-nodelay         enable TCP NODELAY\n"
 #endif
-        "  --client-max-body-size <size>    maximum allowed size of the client request body(unit MB, 0 allow any size, default 1MB)\n"
+        "  --client-max-body-size <size> \n"
+        "                        maximum allowed size of the client request body(unit MB, 0 allow any size, default 1MB)\n"
+        "  --dns-forwarder <[bind_ip:]bind_port:forward_ip:forward_port> \n"
+        "                        forward local dns request to dns server via tcp\n"
         "  -v, --verbose         verbose logging\n"
         "  -V, --version         show version number and quit\n"
         "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
@@ -529,8 +535,7 @@ enum {
     OPTION_SSL_CERTIFICATE_KEY,
     OPTION_TCP_NODELAY,
     OPTION_CLIENT_MAX_BODY_SIZE,
-    OPTION_DNS_FORWARDER_BIND_ADDRESS,
-    OPTION_DNS_FORWARDER_SERVER_ADDRESS,
+    OPTION_DNS_FORWARDER,
 };
 
 int
@@ -542,8 +547,7 @@ main(int argc, char ** argv) {
     const char *password = NULL;
     const char *method = NULL;
     const char *name_server = NULL;
-    const char *dns_forwarder_bind_address = NULL;
-    const char *dns_forwarder_server_address = "1.1.1.1:53";
+    const char *dns_forwarder = NULL;
 #ifndef _WIN32
     const char *userspec = NULL;
     const char *pid_file = NULL;
@@ -574,8 +578,7 @@ main(int argc, char ** argv) {
         {"tcp-nodelay", no_argument, NULL, OPTION_TCP_NODELAY},
 #endif
         {"client-max-body-size", required_argument, NULL, OPTION_CLIENT_MAX_BODY_SIZE},
-        {"dns-forwarder-bind-address", required_argument, NULL, OPTION_DNS_FORWARDER_BIND_ADDRESS},
-        {"dns-forwarder-server", required_argument, NULL, OPTION_DNS_FORWARDER_SERVER_ADDRESS},
+        {"dns-forwarder", required_argument, NULL, OPTION_DNS_FORWARDER},
         {"help", no_argument, NULL, 'h'},
         {"verbose", no_argument, NULL, 'v'},
         {"version", no_argument, NULL, 'V'},
@@ -648,11 +651,8 @@ main(int argc, char ** argv) {
         case OPTION_CLIENT_MAX_BODY_SIZE:
             client_max_body_size = 1024 * 1024 * atof(optarg);
             break;
-        case OPTION_DNS_FORWARDER_BIND_ADDRESS:
-            dns_forwarder_bind_address = optarg;
-            break;
-        case OPTION_DNS_FORWARDER_SERVER_ADDRESS:
-            dns_forwarder_server_address = optarg;
+        case OPTION_DNS_FORWARDER:
+            dns_forwarder = optarg;
             break;
         case 'V':
             version(argv[0]);
@@ -730,8 +730,14 @@ main(int argc, char ** argv) {
 
     lru_init(evbase);
     struct dns_forwarder_t *dnsforwarder = NULL;
-    if (dns_forwarder_bind_address) {
-        dnsforwarder = dns_forwarder_new(evbase, evdns, dns_forwarder_bind_address, dns_forwarder_server_address);
+    if (dns_forwarder) {
+        struct forwarder_param_t param = {0};
+        if (0 == parse_forward_param(dns_forwarder, strlen(dns_forwarder), &param)) {
+            dnsforwarder = dns_forwarder_new(evbase, evdns, &param);
+        }
+        else {
+            LOGE("parse forward param failed");
+        }
     }
 
 #ifndef _WIN32
