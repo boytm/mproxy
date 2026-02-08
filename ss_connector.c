@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 #ifdef _WIN32
 # include <malloc.h>
 #endif
@@ -34,6 +35,7 @@ typedef struct ss_conn_t {
 	uint16_t port;
 	connect_callback cb;
 	void *arg;
+	int response_header_skipped;
 } ss_conn;
 
 
@@ -103,7 +105,7 @@ static enum bufferevent_filter_result input_filter(struct evbuffer *src, struct 
         vec_dst[0].iov_len = 0;
 
         int consume = evbuffer_get_length(src);
-        int produce = aead_decrypt(vec_dst[0].iov_base, ciphertext, &consume, &conn->e_ctx);
+        int produce = aead_decrypt(vec_dst[0].iov_base, ciphertext, &consume, &conn->d_ctx);
         if (produce < 0) {
                 LOGE("aead decrypt failed"); 
                 return BEV_ERROR; 
@@ -112,6 +114,15 @@ static enum bufferevent_filter_result input_filter(struct evbuffer *src, struct 
             return BEV_NEED_MORE;
         }
         else {
+            if (produce > 0 && g_ss_method >= AES_128_GCM_2022 && !conn->response_header_skipped) {
+                size_t salt_len = enc_get_key_len();
+                size_t header_len = 1 + 8 + salt_len;
+                if (produce >= header_len) {
+                    memmove(vec_dst[0].iov_base, (char *)vec_dst[0].iov_base + header_len, produce - header_len);
+                    produce -= header_len;
+                    conn->response_header_skipped = 1;
+                }
+            }
             evbuffer_drain(src, consume);
             vec_dst[0].iov_len = produce;
 
@@ -178,7 +189,7 @@ static enum bufferevent_filter_result output_filter(struct evbuffer *src, struct
             vec_dst[0].iov_len = 0;
 
             //int consume = evbuffer_get_length(src);
-            int produce = aead_encrypt(vec_dst[0].iov_base, plaintext, &consume, &conn->d_ctx);
+            int produce = aead_encrypt(vec_dst[0].iov_base, plaintext, &consume, &conn->e_ctx);
             if (produce < 0) {
                 LOGE("aead encrypt failed");
                 return BEV_ERROR;
@@ -246,18 +257,38 @@ static void ss_eventcb(struct bufferevent *bev, short what, void *ctx)
 			|  1   | Variable |    2     |
 			+------+----------+----------+
 			*/
-			char data[1 + 1 + 255 + 2] = {0x03, };  // DOMAINNAME: X'03
+			char data[1024];
+			size_t data_len = 0;
+			if (g_ss_method >= AES_128_GCM_2022) {
+				// SIP022 AEAD-2022 Header
+				uint64_t ts = (uint64_t)time(NULL);
+				data[0] = 0; // type: HeaderTypeClientPacket
+				data[1] = (ts >> 56) & 0xFF;
+				data[2] = (ts >> 48) & 0xFF;
+				data[3] = (ts >> 40) & 0xFF;
+				data[4] = (ts >> 32) & 0xFF;
+				data[5] = (ts >> 24) & 0xFF;
+				data[6] = (ts >> 16) & 0xFF;
+				data[7] = (ts >> 8) & 0xFF;
+				data[8] = ts & 0xFF;
+				data[9] = 0; // padding length high
+				data[10] = 0; // padding length low
+				data_len = 11;
+			}
+
+			data[data_len++] = 0x03; // ATYP: DOMAINNAME
 			size_t domain_len = strlen(conn->host);
 			assert(domain_len <= 255);
+			data[data_len++] = (uint8_t)domain_len;
+			memcpy(data + data_len, conn->host, domain_len);
+			data_len += domain_len;
 			uint16_t net_port = htons(conn->port);
-
-			data[1] = domain_len;
-			memcpy(data + 2, conn->host, domain_len);
-			memcpy(data + 2 + domain_len, &net_port, 2);
+			memcpy(data + data_len, &net_port, 2);
+			data_len += 2;
 
             /* currently BEV_OPT_DEFER_CALLBACKS no effect with bufferevent_filter_new(), so defer it manually */
             evbuffer_defer_callbacks(bufferevent_get_output(bev_filter), bufferevent_get_base(bev_filter));
-            bufferevent_write(bev_filter, data, 1 + 1 + domain_len + 2);
+            bufferevent_write(bev_filter, data, data_len);
 
             conn->cb(bev_filter, conn->arg);
 		} else {

@@ -26,8 +26,13 @@
 #endif
 
 #include "encrypt.h"
+#include "blake3.h"
 #include <assert.h>
 #include <stdint.h>
+
+#ifndef _WIN32
+#include <arpa/inet.h>
+#endif
 
 #if defined(USE_CRYPTO_OPENSSL)
 
@@ -146,6 +151,10 @@ static struct {
     {"aes-256-ocb",       32,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     // ss quivalent chacha20-ietf-poly1305
     {"chacha20-poly1305", 32,   12,  16, NULL, _("CHACHA20-POLY1305",   CCAlgorithmInvalid) },
+    {"2022-blake3-aes-128-gcm", 16, 12, 16, NULL, _("AES-128-GCM",      CCAlgorithmInvalid) },
+    {"2022-blake3-aes-192-gcm", 24, 12, 16, NULL, _("AES-192-GCM",      CCAlgorithmInvalid) },
+    {"2022-blake3-aes-256-gcm", 32, 12, 16, NULL, _("AES-256-GCM",      CCAlgorithmInvalid) },
+    {"2022-blake3-chacha20-poly1305", 32, 12, 16, NULL, _("CHACHA20-POLY1305", CCAlgorithmInvalid) },
 };
 
 #undef _
@@ -956,12 +965,17 @@ void enc_key_init(int method, const char *pass)
             FATAL("Cannot initialize cipher");
         } while (0);
     }
-    const digest_type_t *md = get_digest_type("MD5");
-    if (md == NULL) {
-        FATAL("MD5 Digest not found in crypto library");
-    }
+    if (method >= AES_128_GCM_2022) {
+        blake3_hash((const uint8_t *)pass, strlen(pass), enc_key, supported_ciphers[method].key_size);
+        enc_key_len = supported_ciphers[method].key_size;
+    } else {
+        const digest_type_t *md = get_digest_type("MD5");
+        if (md == NULL) {
+            FATAL("MD5 Digest not found in crypto library");
+        }
 
-    enc_key_len = bytes_to_key(cipher, md, (const uint8_t *)pass, enc_key, iv);
+        enc_key_len = bytes_to_key(cipher, md, (const uint8_t *)pass, enc_key, iv);
+    }
     if (enc_key_len == 0) {
         FATAL("Cannot generate key and IV");
     }
@@ -1049,9 +1063,13 @@ uint8_t *k)
 
     switch (enc_method) {
     case CHACHA20_IETF_POLY1305:
+    case CHACHA20_POLY1305_2022:
     case AES_128_GCM:
     case AES_192_GCM:
     case AES_256_GCM:
+    case AES_128_GCM_2022:
+    case AES_192_GCM_2022:
+    case AES_256_GCM_2022:
 #if USE_CRYPTO_OPENSSL
     case AES_128_OCB:
     case AES_192_OCB:
@@ -1108,9 +1126,13 @@ uint8_t *n, uint8_t *k)
 
     switch (enc_method) {
     case CHACHA20_IETF_POLY1305:
+    case CHACHA20_POLY1305_2022:
     case AES_128_GCM:
     case AES_192_GCM:
     case AES_256_GCM:
+    case AES_128_GCM_2022:
+    case AES_192_GCM_2022:
+    case AES_256_GCM_2022:
 
 #if USE_CRYPTO_OPENSSL
     case AES_128_OCB:
@@ -1208,11 +1230,18 @@ int crypto_hkdf(const unsigned char *salt,
 static void
 aead_cipher_ctx_set_key(cipher_ctx_t *cipher_ctx, int enc)
 {
-    int err = crypto_hkdf(
-        cipher_ctx->salt, supported_ciphers[enc_method].key_size,
-        enc_key, supported_ciphers[enc_method].key_size,
-        (uint8_t *)SUBKEY_INFO, strlen(SUBKEY_INFO),
-        cipher_ctx->skey, supported_ciphers[enc_method].key_size);
+    int err;
+    if (enc_method >= AES_128_GCM_2022) {
+        blake3_keyed_hash(enc_key, cipher_ctx->salt, supported_ciphers[enc_method].key_size,
+                         cipher_ctx->skey, supported_ciphers[enc_method].key_size);
+        err = 0;
+    } else {
+        err = crypto_hkdf(
+            cipher_ctx->salt, supported_ciphers[enc_method].key_size,
+            enc_key, supported_ciphers[enc_method].key_size,
+            (uint8_t *)SUBKEY_INFO, strlen(SUBKEY_INFO),
+            cipher_ctx->skey, supported_ciphers[enc_method].key_size);
+    }
     if (err) {
         FATAL("Unable to generate subkey");
     }
@@ -1287,36 +1316,46 @@ aead_encrypt(char *ciphertext, char *plaintext, ssize_t *len, struct enc_ctx *ct
     }
 
     int err = CRYPTO_ERROR;
-    size_t salt_ofst = 0;
     size_t salt_len = enc_get_key_len();
     size_t tag_len = enc_get_tag_len();
-
-    if (!ctx->init) {
-        salt_ofst = salt_len;
-    }
-
-    // TODO: loop
-    if (*len > CHUNK_SIZE_MASK) {
-        *len = CHUNK_SIZE_MASK;
-    }
-
-    size_t out_len = salt_ofst + 2 * tag_len + *len + CHUNK_SIZE_LEN;
+    size_t nlen = supported_ciphers[enc_method].iv_size;
 
     if (!ctx->init) {
         rand_bytes(ctx->evp.salt, salt_len);
         memcpy(ciphertext, ctx->evp.salt, salt_len);
         aead_cipher_ctx_set_key(&ctx->evp, 1);
         ctx->init = 1;
+
+        if (enc_method >= AES_128_GCM_2022) {
+            // SIP022 AEAD-2022: First chunk is header, no length prefix
+            size_t clen = *len + tag_len;
+            err = aead_cipher_encrypt(&ctx->evp, (uint8_t *)(ciphertext + salt_len), &clen,
+                                     (uint8_t *)plaintext, *len, NULL, 0, ctx->evp.nonce, ctx->evp.skey);
+            if (err) return CRYPTO_ERROR;
+            nonce_increment(ctx->evp.nonce, nlen);
+            return salt_len + clen;
+        }
+
+        // Standard AEAD: First chunk is Len + Data, but salt is prepended
+        err = aead_chunk_encrypt(&ctx->evp,
+            (uint8_t *)plaintext,
+            (uint8_t *)ciphertext + salt_len,
+            ctx->evp.nonce, *len);
+        if (err) return err;
+        return salt_len + 2 * tag_len + *len + CHUNK_SIZE_LEN;
+    } else {
+        // TODO: loop
+        if (*len > CHUNK_SIZE_MASK) {
+            *len = CHUNK_SIZE_MASK;
+        }
+
+        err = aead_chunk_encrypt(&ctx->evp,
+            (uint8_t *)plaintext,
+            (uint8_t *)ciphertext,
+            ctx->evp.nonce, *len);
+        if (err) return err;
+        return 2 * tag_len + *len + CHUNK_SIZE_LEN;
     }
-
-    err = aead_chunk_encrypt(&ctx->evp,
-        (uint8_t *)plaintext,
-        (uint8_t *)ciphertext + salt_ofst,
-        ctx->evp.nonce, *len);
-    if (err)
-        return err;
-
-    return out_len;
 }
 
 static int
