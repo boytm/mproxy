@@ -56,6 +56,7 @@ struct evdns_base *evdns = NULL;
 const char *g_socks_server = NULL;
 int g_socks_port = DEFAULT_SOCKS5_PORT;
 char *g_proxy_auth = NULL;
+char *g_proxy_realm = "proxy";
 int g_https_proxy = 0;
 int use_syslog = 0;
 int g_enable_nodelay = 0;
@@ -342,8 +343,10 @@ frontend_cb(evhtp_request_t * req, void * arg) {
     if (g_proxy_auth) {
         const char *auth = evhtp_kv_find(req->headers_in, "Proxy-Authorization");
         if (auth == NULL || strncasecmp(auth, "Basic ", 6) != 0 || strcmp(auth + 6, g_proxy_auth + 6) != 0) {
+            char realm_header[512];
+            snprintf(realm_header, sizeof(realm_header), "Basic realm=\"%s\"", g_proxy_realm);
             evhtp_headers_add_header(req->headers_out,
-                evhtp_header_new("Proxy-Authenticate", "Basic realm=\"mproxy\"", 0, 0));
+                evhtp_header_new("Proxy-Authenticate", realm_header, 0, 1));
             evhtp_send_reply(req, EVHTP_RES_PROXYAUTHREQ);
             return;
         }
@@ -497,40 +500,41 @@ void usage(const char *program)
 {
     printf("\nUsage: %s [options]\n", program);
     printf(
-        "  -l <local_port>       proxy listen port, default %d\n"
-        "  -b <local_address>    local address to bind, default " DEFAULT_BIND_ADDRESS "\n"
+        "  -l <local_port>               proxy listen port, default %d\n"
+        "  -b <local_address>            local address to bind, default " DEFAULT_BIND_ADDRESS "\n"
 #ifndef ENABLE_SS
-        "  -p <server_port>      socks5 server port\n"
-        "  -s <server_address>   socks5 server address\n"
+        "  -p <server_port>              socks5 server port\n"
+        "  -s <server_address>           socks5 server address\n"
 #else
-        "  -p <server_port>      socks5/ss server port\n"
-        "  -s <server_address>   socks5/ss server address\n"
-        "  -m <encrypt_method>   encrypt method of remote ss server\n"
-        "  -k <password>         password of remote ss server\n"
-        "  --pac <pac_file>      pac file\n"
+        "  -p <server_port>              socks5/ss server port\n"
+        "  -s <server_address>           socks5/ss server address\n"
+        "  -m <encrypt_method>           encrypt method of remote ss server\n"
+        "  -k <password>                 password of remote ss server\n"
+        "  --pac <pac_file>              pac file\n"
 #endif
-        "  --dns <nameserver>    name server\n"
+        "  --dns <nameserver>            name server\n"
 #ifndef _WIN32
-        "  --user <user[:group]> set user and group\n"
-        "  --pid-file <path>     pid file\n"
+        "  --user <user[:group]>         set user and group\n"
+        "  --pid-file <path>             pid file\n"
 #endif
 #ifdef ENABLE_HTTPS_PROXY
-        "  --ssl-certificate <fullchain.pem> \n"
-        "                        set ssl certificate\n"
-        "  --ssl-certificate-key <privkey.pem> \n"
-        "                        set ssl private key\n"
+        "  --ssl-certificate <file>      set ssl certificate\n"
+        "  --ssl-certificate-key <file>  set ssl private key\n"
 #endif
 #ifdef TCP_NODELAY
-        "  --tcp-nodelay         enable TCP NODELAY\n"
+        "  --tcp-nodelay                 enable TCP NODELAY\n"
 #endif
-        "  --client-max-body-size <size> \n"
-        "                        maximum allowed size of the client request body(unit MB, 0 allow any size, default 1MB)\n"
-        "  --dns-forwarder <[bind_ip:]bind_port:forward_ip:forward_port> \n"
-        "                        forward local dns request to dns server via tcp\n"
-        "  --auth <user:password> basic auth for proxy\n"
-        "  -v, --verbose         verbose logging\n"
-        "  -V, --version         show version number and quit\n"
-        "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
+        "  --client-max-body-size <size>\n"
+        "                                maximum allowed size of the client request body\n"
+        "                                (unit MB, 0 allow any size, default 1MB)\n"
+        "  --dns-forwarder <addr>\n"
+        "                                forward local dns request to dns server via tcp\n"
+        "                                addr: [bind_ip:]bind_port:forward_ip:forward_port\n"
+        "  --auth <user:password>        basic auth for proxy\n"
+        "  --auth-realm <realm>          proxy auth realm, default proxy\n"
+        "  -v, --verbose                 verbose logging\n"
+        "  -V, --version                 show version number and quit\n"
+        "  -h, --help                    show help\n", DEFAULT_LISTEN_PORT);
 #ifdef ENABLE_SS
     char buf[4096] = {'\0'};
     enc_print_all_methods(buf, sizeof(buf)/sizeof(buf[0]));
@@ -552,6 +556,7 @@ enum {
     OPTION_CLIENT_MAX_BODY_SIZE,
     OPTION_DNS_FORWARDER,
     OPTION_AUTH,
+    OPTION_AUTH_REALM,
 };
 
 int
@@ -596,6 +601,7 @@ main(int argc, char ** argv) {
         {"client-max-body-size", required_argument, NULL, OPTION_CLIENT_MAX_BODY_SIZE},
         {"dns-forwarder", required_argument, NULL, OPTION_DNS_FORWARDER},
         {"auth", required_argument, NULL, OPTION_AUTH},
+        {"auth-realm", required_argument, NULL, OPTION_AUTH_REALM},
         {"help", no_argument, NULL, 'h'},
         {"verbose", no_argument, NULL, 'v'},
         {"version", no_argument, NULL, 'V'},
@@ -670,6 +676,9 @@ main(int argc, char ** argv) {
             break;
         case OPTION_DNS_FORWARDER:
             dns_forwarder = optarg;
+            break;
+        case OPTION_AUTH_REALM:
+            g_proxy_realm = optarg;
             break;
         case OPTION_AUTH:
             {
