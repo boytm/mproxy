@@ -9,5 +9,6 @@ int write_pid_file(const char *pid_file);
 int change_user(const char *userspec);
 #endif
 void hexdump(FILE *out, const void *p, int len);
+char *base64_encode(const unsigned char *src, size_t len);
 
 #endif // __UTILS_H__
