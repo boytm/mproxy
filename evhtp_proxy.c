@@ -55,6 +55,7 @@ struct evdns_base *evdns = NULL;
 #endif
 const char *g_socks_server = NULL;
 int g_socks_port = DEFAULT_SOCKS5_PORT;
+char *g_proxy_auth = NULL;
 int g_https_proxy = 0;
 int use_syslog = 0;
 int g_enable_nodelay = 0;
@@ -258,6 +259,9 @@ make_request(evhtp_connection_t * conn,
         if (strcasecmp(kv->key, "Proxy-Connection") == 0) {
             continue;
         }
+        if (g_proxy_auth && strcasecmp(kv->key, "Proxy-Authorization") == 0) {
+            continue;
+        }
         evhtp_kvs_add_kv(request->headers_out, evhtp_kv_new(kv->key,
             kv->val,
             kv->k_heaped,
@@ -333,6 +337,16 @@ frontend_cb(evhtp_request_t * req, void * arg) {
     if (strlen(host) > 255) {
         LOGE("domain %s too long", host);
         return evhtp_send_reply(req, EVHTP_RES_SERVERR);
+    }
+
+    if (g_proxy_auth) {
+        const char *auth = evhtp_kv_find(req->headers_in, "Proxy-Authorization");
+        if (auth == NULL || strncasecmp(auth, "Basic ", 6) != 0 || strcmp(auth + 6, g_proxy_auth + 6) != 0) {
+            evhtp_headers_add_header(req->headers_out,
+                evhtp_header_new("Proxy-Authenticate", "Basic realm=\"mproxy\"", 0, 0));
+            evhtp_send_reply(req, EVHTP_RES_PROXYAUTHREQ);
+            return;
+        }
     }
 
     /* Pause the frontend request while we run the backend requests. */
@@ -513,6 +527,7 @@ void usage(const char *program)
         "                        maximum allowed size of the client request body(unit MB, 0 allow any size, default 1MB)\n"
         "  --dns-forwarder <[bind_ip:]bind_port:forward_ip:forward_port> \n"
         "                        forward local dns request to dns server via tcp\n"
+        "  --auth <user:password> basic auth for proxy\n"
         "  -v, --verbose         verbose logging\n"
         "  -V, --version         show version number and quit\n"
         "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
@@ -536,6 +551,7 @@ enum {
     OPTION_TCP_NODELAY,
     OPTION_CLIENT_MAX_BODY_SIZE,
     OPTION_DNS_FORWARDER,
+    OPTION_AUTH,
 };
 
 int
@@ -579,6 +595,7 @@ main(int argc, char ** argv) {
 #endif
         {"client-max-body-size", required_argument, NULL, OPTION_CLIENT_MAX_BODY_SIZE},
         {"dns-forwarder", required_argument, NULL, OPTION_DNS_FORWARDER},
+        {"auth", required_argument, NULL, OPTION_AUTH},
         {"help", no_argument, NULL, 'h'},
         {"verbose", no_argument, NULL, 'v'},
         {"version", no_argument, NULL, 'V'},
@@ -653,6 +670,18 @@ main(int argc, char ** argv) {
             break;
         case OPTION_DNS_FORWARDER:
             dns_forwarder = optarg;
+            break;
+        case OPTION_AUTH:
+            {
+                char *auth_b64 = base64_encode((unsigned char *)optarg, strlen(optarg));
+                if (auth_b64) {
+                    g_proxy_auth = malloc(strlen(auth_b64) + 7);
+                    if (g_proxy_auth) {
+                        sprintf(g_proxy_auth, "Basic %s", auth_b64);
+                    }
+                    free(auth_b64);
+                }
+            }
             break;
         case 'V':
             version(argv[0]);
