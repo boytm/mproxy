@@ -496,40 +496,40 @@ void usage(const char *program)
 {
     printf("\nUsage: %s [options]\n", program);
     printf(
-        "  -l <local_port>       proxy listen port, default %d\n"
-        "  -b <local_address>    local address to bind, default " DEFAULT_BIND_ADDRESS "\n"
+        "  -l <local_port>               proxy listen port, default %d\n"
+        "  -b <local_address>            local address to bind, default " DEFAULT_BIND_ADDRESS "\n"
 #ifndef ENABLE_SS
-        "  -p <server_port>      socks5 server port\n"
-        "  -s <server_address>   socks5 server address\n"
+        "  -p <server_port>              socks5 server port\n"
+        "  -s <server_address>           socks5 server address\n"
 #else
-        "  -p <server_port>      socks5/ss server port\n"
-        "  -s <server_address>   socks5/ss server address\n"
-        "  -m <encrypt_method>   encrypt method of remote ss server\n"
-        "  -k <password>         password of remote ss server\n"
-        "  --pac <pac_file>      pac file\n"
+        "  -p <server_port>              socks5/ss server port\n"
+        "  -s <server_address>           socks5/ss server address\n"
+        "  -m <encrypt_method>           encrypt method of remote ss server\n"
+        "  -k <password>                 password of remote ss server\n"
+        "  --pac <pac_file>              pac file\n"
 #endif
-        "  --dns <nameserver>    name server\n"
+        "  --dns <nameserver>            name server\n"
 #ifndef _WIN32
-        "  --user <user[:group]> set user and group\n"
-        "  --pid-file <path>     pid file\n"
+        "  --user <user[:group]>         set user and group\n"
+        "  --pid-file <path>             pid file\n"
 #endif
 #ifdef ENABLE_HTTPS_PROXY
-        "  --ssl-certificate <fullchain.pem> \n"
-        "                        set ssl certificate\n"
-        "  --ssl-certificate-key <privkey.pem> \n"
-        "                        set ssl private key\n"
+        "  --ssl-certificate <file>      set ssl certificate\n"
+        "  --ssl-certificate-key <file>  set ssl private key\n"
 #endif
 #ifdef TCP_NODELAY
-        "  --tcp-nodelay         enable TCP NODELAY\n"
+        "  --tcp-nodelay                 enable TCP NODELAY\n"
 #endif
-        "  --client-max-body-size <size> \n"
-        "                        maximum allowed size of the client request body(unit MB, 0 allow any size, default 1MB)\n"
-        "  --dns-forwarder <[bind_ip:]bind_port:forward_ip:forward_port> \n"
-        "                        forward local dns request to dns server via tcp\n"
-        "  --auth <user:password> basic auth for proxy\n"
-        "  -v, --verbose         verbose logging\n"
-        "  -V, --version         show version number and quit\n"
-        "  -h, --help            show help\n", DEFAULT_LISTEN_PORT);
+        "  --client-max-body-size <size>\n"
+        "                                maximum allowed size of the client request body\n"
+        "                                (unit MB, 0 allow any size, default 1MB)\n"
+        "  --dns-forwarder <addr>\n"
+        "                                forward local dns request to dns server via tcp\n"
+        "                                addr: [bind_ip:]bind_port:forward_ip:forward_port\n"
+        "  --auth <user:password>        basic auth for proxy\n"
+        "  -v, --verbose                 verbose logging\n"
+        "  -V, --version                 show version number and quit\n"
+        "  -h, --help                    show help\n", DEFAULT_LISTEN_PORT);
 #ifdef ENABLE_SS
     char buf[4096] = {'\0'};
     enc_print_all_methods(buf, sizeof(buf)/sizeof(buf[0]));
