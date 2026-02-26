@@ -311,15 +311,6 @@ backend_cb(evhtp_request_t * backend_req, void * arg) {
 
 static void
 frontend_cb(evhtp_request_t * req, void * arg) {
-    if (g_proxy_auth) {
-        const char *auth = evhtp_kv_find(req->headers_in, "Proxy-Authorization");
-        if (auth == NULL || strncasecmp(auth, "Basic ", 6) != 0 || strcmp(auth + 6, g_proxy_auth + 6) != 0) {
-            evhtp_headers_add_header(req->headers_out,
-                evhtp_header_new("Proxy-Authenticate", "Basic realm=\"mproxy\"", 0, 0));
-            evhtp_send_reply(req, EVHTP_RES_PROXYAUTHREQ);
-            return;
-        }
-    }
 #ifdef USE_THREAD
     int * aux;
     int   thr;
@@ -346,6 +337,16 @@ frontend_cb(evhtp_request_t * req, void * arg) {
     if (strlen(host) > 255) {
         LOGE("domain %s too long", host);
         return evhtp_send_reply(req, EVHTP_RES_SERVERR);
+    }
+
+    if (g_proxy_auth) {
+        const char *auth = evhtp_kv_find(req->headers_in, "Proxy-Authorization");
+        if (auth == NULL || strncasecmp(auth, "Basic ", 6) != 0 || strcmp(auth + 6, g_proxy_auth + 6) != 0) {
+            evhtp_headers_add_header(req->headers_out,
+                evhtp_header_new("Proxy-Authenticate", "Basic realm=\"mproxy\"", 0, 0));
+            evhtp_send_reply(req, EVHTP_RES_PROXYAUTHREQ);
+            return;
+        }
     }
 
     /* Pause the frontend request while we run the backend requests. */
