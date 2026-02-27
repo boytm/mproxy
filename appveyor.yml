@@ -11,6 +11,7 @@ image:
 environment:
   LIBEVENT_VERSION: 2.1.10
   BOOST_ROOT: C:\Libraries\boost_1_69_0
+  OPENSSL_ROOT_DIR: C:\OpenSSL-v111-Win64
 
   matrix:
     # build without shadowsocks protocol
@@ -29,7 +30,6 @@ environment:
       CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
       BUILD_SUFFIX: "openssl_vc2017_x64"
       BITS: 64
-      OPENSSL_ROOT_DIR: C:\OpenSSL-v111-Win64
       BOOST_LIBRARYDIR: C:\Libraries\boost_1_69_0\lib64-msvc-14.1
 
     # build with mbed TLS library
@@ -50,6 +50,7 @@ environment:
       CMAKE_GENERATOR: "Visual Studio 15 2017"
       BUILD_SUFFIX: "mbedtls_vc2017_x86"
       BITS: 32
+      OPENSSL_ROOT_DIR: C:\OpenSSL-v111-Win32
       BOOST_LIBRARYDIR: C:\Libraries\boost_1_69_0\lib32-msvc-14.1
 
     # build https proxy with openssl library
@@ -100,7 +101,7 @@ build_script:
 - set PATH=C:\Python27-x64\scripts;C:\Python27-x64;%PATH%
 - mkdir cmake-build
 - cd cmake-build
-- cmake -G "%CMAKE_GENERATOR%" -DENABLE_HTTPS_PROXY:STRING="%ENABLE_HTTPS_PROXY%" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-%LIBEVENT_VERSION%-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-%MBEDTLS_VERSION% -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
+- cmake -G "%CMAKE_GENERATOR%" -DENABLE_HTTPS_PROXY:STRING="%ENABLE_HTTPS_PROXY%" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-%LIBEVENT_VERSION%-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-%MBEDTLS_VERSION% -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" -DOPENSSL_ROOT_DIR="%OPENSSL_ROOT_DIR%" ..
 - cmake --build . --config Release
 # TODO: 
 # - cpack
