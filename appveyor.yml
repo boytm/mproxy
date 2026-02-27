@@ -9,7 +9,7 @@ image:
   - Visual Studio 2017
 
 environment:
-  LIBEVENT_VERSION: 2.1.12
+  LIBEVENT_VERSION: 2.1.10
   BOOST_ROOT: C:\Libraries\boost_1_69_0
 
   matrix:
