@@ -10,8 +10,7 @@ image:
 
 environment:
   LIBEVENT_VERSION: 2.1.10
-  BOOST_ROOT: C:\Libraries\boost_1_59_0
-  BOOST_LIBRARYDIR: C:\Libraries\boost_1_59_0\lib64-msvc-14.0
+  BOOST_ROOT: C:\Libraries\boost_1_69_0
 
   matrix:
     # build without shadowsocks protocol
@@ -21,6 +20,7 @@ environment:
       CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
       BUILD_SUFFIX: "vc2017_x64"
       BITS: 64
+      BOOST_LIBRARYDIR: C:\Libraries\boost_1_69_0\lib64-msvc-14.1
 
     # build with openssl library
     - ENABLE_SS: ON
@@ -29,27 +29,28 @@ environment:
       CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
       BUILD_SUFFIX: "openssl_vc2017_x64"
       BITS: 64
-      OPENSSL_VERSION: 1_1_1j
-      OPENSSL_DIR: C:\OpenSSL
-      OPENSSL_ROOT_DIR: C:\OpenSSL
+      OPENSSL_ROOT_DIR: C:\OpenSSL-v111-Win64
+      BOOST_LIBRARYDIR: C:\Libraries\boost_1_69_0\lib64-msvc-14.1
 
     # build with mbed TLS library
     - ENABLE_SS: ON
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: ON
-      MBEDTLS_VERSION: 2.16.6
+      MBEDTLS_VERSION: 2.28.8
       CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
       BUILD_SUFFIX: "mbedtls_vc2017_x64"
       BITS: 64
+      BOOST_LIBRARYDIR: C:\Libraries\boost_1_69_0\lib64-msvc-14.1
 
     # x86 build with mbed TLS library
     - ENABLE_SS: ON
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: ON
-      MBEDTLS_VERSION: 2.16.6
+      MBEDTLS_VERSION: 2.28.8
       CMAKE_GENERATOR: "Visual Studio 15 2017"
       BUILD_SUFFIX: "mbedtls_vc2017_x86"
       BITS: 32
+      BOOST_LIBRARYDIR: C:\Libraries\boost_1_69_0\lib32-msvc-14.1
 
     # build https proxy with openssl library
     #- ENABLE_SS: ON
@@ -64,15 +65,10 @@ install:
 - git submodule update --init --recursive --depth 3
   # VC env
 - '"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars%BITS%.bat"'
-  # install OpenSSL
-- mkdir C:\OpenSSL
-- ps: if (Test-Path env:OPENSSL_VERSION) { Start-FileDownload "http://slproweb.com/download/Win${env:BITS}OpenSSL-${env:OPENSSL_VERSION}.exe" }
-- if defined OPENSSL_VERSION Win%BITS%OpenSSL-%OPENSSL_VERSION%.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
-#- appveyor DownloadFile https://curl.haxx.se/ca/cacert.pem -FileName C:\OpenSSL\cacert.pem
   # mbedTLS
 - cd \
-- if defined MBEDTLS_VERSION appveyor DownloadFile https://tls.mbed.org/download/mbedtls-%MBEDTLS_VERSION%-apache.tgz
-- if defined MBEDTLS_VERSION 7z x mbedtls-%MBEDTLS_VERSION%-apache.tgz -so | 7z x -si -ttar > nul
+- if defined MBEDTLS_VERSION appveyor DownloadFile https://github.com/Mbed-TLS/mbedtls/archive/v%MBEDTLS_VERSION%.tar.gz -FileName mbedtls-%MBEDTLS_VERSION%.tar.gz
+- if defined MBEDTLS_VERSION 7z x mbedtls-%MBEDTLS_VERSION%.tar.gz -so | 7z x -si -ttar > nul
 - if defined MBEDTLS_VERSION cd mbedtls-%MBEDTLS_VERSION%
 - if defined MBEDTLS_VERSION mkdir lib
 - if defined MBEDTLS_VERSION mkdir cmake-build
