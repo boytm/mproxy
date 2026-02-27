@@ -84,22 +84,41 @@ static void dump(char *tag, char *text, int len)
     exit(-1); \
 } while (0)
 
-#ifdef USE_CRYPTO_MBEDTLS
-# define _(mbedtls, cc) mbedtls
-# ifdef USE_CRYPTO_APPLECC
-#  define _(mbedtls, cc) mbedtls, cc
+#define _(openssl, mbedtls, applecc)
+#if defined(USE_CRYPTO_OPENSSL)
+# undef _
+# define _(openssl, mbedtls, applecc) openssl
+#endif
+#if defined(USE_CRYPTO_MBEDTLS)
+# undef _
+# if defined(USE_CRYPTO_OPENSSL)
+#  define _(openssl, mbedtls, applecc) openssl, mbedtls
+# else
+#  define _(openssl, mbedtls, applecc) mbedtls
 # endif
-#else
-# define _(mbedtls, cc) 
+#endif
+#if defined(USE_CRYPTO_APPLECC)
+# undef _
+# if defined(USE_CRYPTO_OPENSSL) && defined(USE_CRYPTO_MBEDTLS)
+#  define _(openssl, mbedtls, applecc) openssl, mbedtls, applecc
+# elif defined(USE_CRYPTO_OPENSSL)
+#  define _(openssl, mbedtls, applecc) openssl, applecc
+# elif defined(USE_CRYPTO_MBEDTLS)
+#  define _(openssl, mbedtls, applecc) mbedtls, applecc
+# else
+#  define _(openssl, mbedtls, applecc) applecc
+# endif
 #endif
 
 static struct {
     const char *name;
-    const char *cipher_openssl;
     const uint8_t key_size;
     const uint8_t iv_size;
     const uint8_t tag_size;
     const cipher_kt_t *cipher;
+#ifdef USE_CRYPTO_OPENSSL
+    const char *cipher_openssl;
+#endif
 #ifdef USE_CRYPTO_MBEDTLS
     const char *cipher_mbedtls;
 #endif
@@ -109,44 +128,44 @@ static struct {
 } supported_ciphers[CIPHER_NUM] =
 {
     // stream: tcp stream first rand bytes is iv
-    {"table",              "table",               0,    0,   0, NULL, _("table",               CCAlgorithmInvalid) },
-    {"rc4",                "rc4",                16,    0,   0, NULL, _("ARC4-128",            CCAlgorithmRC4)     },
-    {"rc4-md5",            "rc4-md5",            16,   16,   0, NULL, _("ARC4-128",            CCAlgorithmRC4)     },
-    {"aes-128-cfb",        "aes-128-cfb",        16,   16,   0, NULL, _("AES-128-CFB128",      CCAlgorithmAES)     },
-    {"aes-192-cfb",        "aes-192-cfb",        24,   16,   0, NULL, _("AES-192-CFB128",      CCAlgorithmAES)     },
-    {"aes-256-cfb",        "aes-256-cfb",        32,   16,   0, NULL, _("AES-256-CFB128",      CCAlgorithmAES)     },
-    {"bf-cfb",             "bf-cfb",             16,    8,   0, NULL, _("BLOWFISH-CFB64",      CCAlgorithmBlowfish)},
-    {"camellia-128-cfb",   "camellia-128-cfb",   16,   16,   0, NULL, _("CAMELLIA-128-CFB128", CCAlgorithmInvalid) },
-    {"camellia-192-cfb",   "camellia-192-cfb",   24,   16,   0, NULL, _("CAMELLIA-192-CFB128", CCAlgorithmInvalid) },
-    {"camellia-256-cfb",   "camellia-256-cfb",   32,   16,   0, NULL, _("CAMELLIA-256-CFB128", CCAlgorithmInvalid) },
-    {"cast5-cfb",          "cast5-cfb",          16,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmCAST)    },
-    {"des-cfb",            "des-cfb",             8,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmDES)     },
-    {"idea-cfb",           "idea-cfb",           16,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"rc2-cfb",            "rc2-cfb",            16,    8,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmRC2)     },
-    {"seed-cfb",           "seed-cfb",           16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-128-ofb",        "aes-128-ofb",        16,   16,   0, NULL, _("AES-128-OFB",         CCAlgorithmInvalid) },
-    {"aes-192-ofb",        "aes-192-ofb",        24,   16,   0, NULL, _("AES-192-OFB",         CCAlgorithmInvalid) },
-    {"aes-256-ofb",        "aes-256-ofb",        32,   16,   0, NULL, _("AES-256-OFB",         CCAlgorithmInvalid) },
-    {"aes-128-ctr",        "aes-128-ctr",        16,   16,   0, NULL, _("AES-128-CTR",         CCAlgorithmInvalid) },
-    {"aes-192-ctr",        "aes-192-ctr",        24,   16,   0, NULL, _("AES-192-CTR",         CCAlgorithmInvalid) },
-    {"aes-256-ctr",        "aes-256-ctr",        32,   16,   0, NULL, _("AES-256-CTR",         CCAlgorithmInvalid) },
-    {"aes-128-cfb8",       "aes-128-cfb8",       16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-192-cfb8",       "aes-192-cfb8",       24,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-256-cfb8",       "aes-256-cfb8",       32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-128-cfb1",       "aes-128-cfb1",       16,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-192-cfb1",       "aes-192-cfb1",       24,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-256-cfb1",       "aes-256-cfb1",       32,   16,   0, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"table",               0,    0,   0, NULL, _("table",               "table",               CCAlgorithmInvalid) },
+    {"rc4",                16,    0,   0, NULL, _("rc4",                 "ARC4-128",            CCAlgorithmRC4)     },
+    {"rc4-md5",            16,   16,   0, NULL, _("rc4-md5",             "ARC4-128",            CCAlgorithmRC4)     },
+    {"aes-128-cfb",        16,   16,   0, NULL, _("aes-128-cfb",         "AES-128-CFB128",      CCAlgorithmAES)     },
+    {"aes-192-cfb",        24,   16,   0, NULL, _("aes-192-cfb",         "AES-192-CFB128",      CCAlgorithmAES)     },
+    {"aes-256-cfb",        32,   16,   0, NULL, _("aes-256-cfb",         "AES-256-CFB128",      CCAlgorithmAES)     },
+    {"bf-cfb",             16,    8,   0, NULL, _("bf-cfb",              "BLOWFISH-CFB64",      CCAlgorithmBlowfish)},
+    {"camellia-128-cfb",   16,   16,   0, NULL, _("camellia-128-cfb",    "CAMELLIA-128-CFB128", CCAlgorithmInvalid) },
+    {"camellia-192-cfb",   24,   16,   0, NULL, _("camellia-192-cfb",    "CAMELLIA-192-CFB128", CCAlgorithmInvalid) },
+    {"camellia-256-cfb",   32,   16,   0, NULL, _("camellia-256-cfb",    "CAMELLIA-256-CFB128", CCAlgorithmInvalid) },
+    {"cast5-cfb",          16,    8,   0, NULL, _("cast5-cfb",           CIPHER_UNSUPPORTED,    CCAlgorithmCAST)    },
+    {"des-cfb",             8,    8,   0, NULL, _("des-cfb",             CIPHER_UNSUPPORTED,    CCAlgorithmDES)     },
+    {"idea-cfb",           16,    8,   0, NULL, _("idea-cfb",            CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"rc2-cfb",            16,    8,   0, NULL, _("rc2-cfb",             CIPHER_UNSUPPORTED,    CCAlgorithmRC2)     },
+    {"seed-cfb",           16,   16,   0, NULL, _("seed-cfb",            CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-128-ofb",        16,   16,   0, NULL, _("aes-128-ofb",         "AES-128-OFB",         CCAlgorithmInvalid) },
+    {"aes-192-ofb",        24,   16,   0, NULL, _("aes-192-ofb",         "AES-192-OFB",         CCAlgorithmInvalid) },
+    {"aes-256-ofb",        32,   16,   0, NULL, _("aes-256-ofb",         "AES-256-OFB",         CCAlgorithmInvalid) },
+    {"aes-128-ctr",        16,   16,   0, NULL, _("aes-128-ctr",         "AES-128-CTR",         CCAlgorithmInvalid) },
+    {"aes-192-ctr",        24,   16,   0, NULL, _("aes-192-ctr",         "AES-192-CTR",         CCAlgorithmInvalid) },
+    {"aes-256-ctr",        32,   16,   0, NULL, _("aes-256-ctr",         "AES-256-CTR",         CCAlgorithmInvalid) },
+    {"aes-128-cfb8",       16,   16,   0, NULL, _("aes-128-cfb8",        CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-cfb8",       24,   16,   0, NULL, _("aes-192-cfb8",        CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-cfb8",       32,   16,   0, NULL, _("aes-256-cfb8",        CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-128-cfb1",       16,   16,   0, NULL, _("aes-128-cfb1",        CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-cfb1",       24,   16,   0, NULL, _("aes-192-cfb1",        CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-cfb1",       32,   16,   0, NULL, _("aes-256-cfb1",        CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     // ss quivalent chacha20-ietf
-    {"chacha20-ietf",      "chacha20",           32,   12,   0, NULL, _("CHACHA20",            CCAlgorithmInvalid) },
+    {"chacha20-ietf",      32,   12,   0, NULL, _("chacha20",            "CHACHA20",            CCAlgorithmInvalid) },
     // AEAD: tcp stream first rand bytes = key len
-    {"aes-128-gcm",        "aes-128-gcm",        16,   12,  16, NULL, _("AES-128-GCM",         CCAlgorithmInvalid) },
-    {"aes-192-gcm",        "aes-192-gcm",        24,   12,  16, NULL, _("AES-192-GCM",         CCAlgorithmInvalid) },
-    {"aes-256-gcm",        "aes-256-gcm",        32,   12,  16, NULL, _("AES-256-GCM",         CCAlgorithmInvalid) },
-    {"aes-128-ocb",        "aes-128-ocb",        16,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-192-ocb",        "aes-192-ocb",        24,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
-    {"aes-256-ocb",        "aes-256-ocb",        32,   12,  16, NULL, _(CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-128-gcm",        16,   12,  16, NULL, _("aes-128-gcm",         "AES-128-GCM",         CCAlgorithmInvalid) },
+    {"aes-192-gcm",        24,   12,  16, NULL, _("aes-192-gcm",         "AES-192-GCM",         CCAlgorithmInvalid) },
+    {"aes-256-gcm",        32,   12,  16, NULL, _("aes-256-gcm",         "AES-256-GCM",         CCAlgorithmInvalid) },
+    {"aes-128-ocb",        16,   12,  16, NULL, _("aes-128-ocb",         CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-192-ocb",        24,   12,  16, NULL, _("aes-192-ocb",         CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
+    {"aes-256-ocb",        32,   12,  16, NULL, _("aes-256-ocb",         CIPHER_UNSUPPORTED,    CCAlgorithmInvalid) },
     // ss quivalent chacha20-ietf-poly1305
-    {"chacha20-ietf-poly1305", "chacha20-poly1305", 32,   12,  16, NULL, _("CHACHA20-POLY1305",   CCAlgorithmInvalid) },
+    {"chacha20-ietf-poly1305", 32,   12,  16, NULL, _("chacha20-poly1305",  "CHACHA20-POLY1305",   CCAlgorithmInvalid) },
 };
 
 #undef _
@@ -978,8 +997,11 @@ int enc_init(const char *pass, const char *method)
     int m = TABLE;
     if (method != NULL) {
         for (m = TABLE; m < CIPHER_NUM; m++) {
-            if (strcmp(method, supported_ciphers[m].name) == 0 ||
-                strcmp(method, supported_ciphers[m].cipher_openssl) == 0) {
+            if (strcmp(method, supported_ciphers[m].name) == 0
+#ifdef USE_CRYPTO_OPENSSL
+                || strcmp(method, supported_ciphers[m].cipher_openssl) == 0
+#endif
+               ) {
                 break;
             }
         }
