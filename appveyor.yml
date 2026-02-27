@@ -1,4 +1,3 @@
-
 # build mproxy on AppVeyor - https://ci.appveyor.com
 
 #shallow_clone: true
@@ -6,50 +5,59 @@ clone_depth: 10
 
 version: '{build}'
 image:
-  - Visual Studio 2017
+  - Visual Studio 2022
 
 environment:
   LIBEVENT_VERSION: 2.1.10
-  BOOST_ROOT: C:\Libraries\boost_1_59_0
-  BOOST_LIBRARYDIR: C:\Libraries\boost_1_59_0\lib64-msvc-14.0
+  BOOST_ROOT: C:\Libraries\boost_1_86_0
 
   matrix:
     # build without shadowsocks protocol
     - ENABLE_SS: OFF
+      ENABLE_HTTPS_PROXY: OFF
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: OFF
-      CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
-      BUILD_SUFFIX: "vc2017_x64"
+      CMAKE_GENERATOR: "Visual Studio 17 2022"
+      ARCH: x64
+      BUILD_SUFFIX: "vc2022_x64"
       BITS: 64
+      BOOST_LIBRARYDIR: C:\Libraries\boost_1_86_0\lib64-msvc-14.3
 
     # build with openssl library
     - ENABLE_SS: ON
+      ENABLE_HTTPS_PROXY: OFF
       USE_CRYPTO_OPENSSL: ON
       USE_CRYPTO_MBEDTLS: OFF
-      CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
-      BUILD_SUFFIX: "openssl_vc2017_x64"
+      CMAKE_GENERATOR: "Visual Studio 17 2022"
+      ARCH: x64
+      BUILD_SUFFIX: "openssl_vc2022_x64"
       BITS: 64
-      OPENSSL_VERSION: 1_1_1j
-      OPENSSL_DIR: C:\OpenSSL
-      OPENSSL_ROOT_DIR: C:\OpenSSL
+      OPENSSL_ROOT_DIR: C:\OpenSSL-Win64
+      BOOST_LIBRARYDIR: C:\Libraries\boost_1_86_0\lib64-msvc-14.3
 
     # build with mbed TLS library
     - ENABLE_SS: ON
+      ENABLE_HTTPS_PROXY: OFF
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: ON
-      MBEDTLS_VERSION: 2.16.6
-      CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
-      BUILD_SUFFIX: "mbedtls_vc2017_x64"
+      MBEDTLS_VERSION: 2.28.10
+      CMAKE_GENERATOR: "Visual Studio 17 2022"
+      ARCH: x64
+      BUILD_SUFFIX: "mbedtls_vc2022_x64"
       BITS: 64
+      BOOST_LIBRARYDIR: C:\Libraries\boost_1_86_0\lib64-msvc-14.3
 
     # x86 build with mbed TLS library
     - ENABLE_SS: ON
+      ENABLE_HTTPS_PROXY: OFF
       USE_CRYPTO_OPENSSL: OFF
       USE_CRYPTO_MBEDTLS: ON
-      MBEDTLS_VERSION: 2.16.6
-      CMAKE_GENERATOR: "Visual Studio 15 2017"
-      BUILD_SUFFIX: "mbedtls_vc2017_x86"
+      MBEDTLS_VERSION: 2.28.10
+      CMAKE_GENERATOR: "Visual Studio 17 2022"
+      ARCH: Win32
+      BUILD_SUFFIX: "mbedtls_vc2022_x86"
       BITS: 32
+      BOOST_LIBRARYDIR: C:\Libraries\boost_1_86_0\lib32-msvc-14.3
 
     # build https proxy with openssl library
     #- ENABLE_SS: ON
@@ -58,61 +66,50 @@ environment:
     #  USE_CRYPTO_MBEDTLS: OFF
 
 install:
-- ECHO "Filesystem root:"
-- ps: "ls \"C:/\""
-  # recursive clone 
-- git submodule update --init --recursive --depth 3
-  # VC env
-- '"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars%BITS%.bat"'
-  # install OpenSSL
-- mkdir C:\OpenSSL
-- ps: if (Test-Path env:OPENSSL_VERSION) { Start-FileDownload "http://slproweb.com/download/Win${env:BITS}OpenSSL-${env:OPENSSL_VERSION}.exe" }
-- if defined OPENSSL_VERSION Win%BITS%OpenSSL-%OPENSSL_VERSION%.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
-#- appveyor DownloadFile https://curl.haxx.se/ca/cacert.pem -FileName C:\OpenSSL\cacert.pem
-  # mbedTLS
-- cd \
-- if defined MBEDTLS_VERSION appveyor DownloadFile https://tls.mbed.org/download/mbedtls-%MBEDTLS_VERSION%-apache.tgz
-- if defined MBEDTLS_VERSION 7z x mbedtls-%MBEDTLS_VERSION%-apache.tgz -so | 7z x -si -ttar > nul
-- if defined MBEDTLS_VERSION cd mbedtls-%MBEDTLS_VERSION%
-- if defined MBEDTLS_VERSION mkdir lib
-- if defined MBEDTLS_VERSION mkdir cmake-build
-- if defined MBEDTLS_VERSION cd cmake-build
-- if defined MBEDTLS_VERSION cmake -G "%CMAKE_GENERATOR%" .. 
-- if defined MBEDTLS_VERSION cmake --build . --config Release --target mbedtls
-- if defined MBEDTLS_VERSION move library\Release\*.lib ..\lib\
-  # Libevent
-- cd \
-- appveyor DownloadFile https://github.com/libevent/libevent/releases/download/release-%LIBEVENT_VERSION%-stable/libevent-%LIBEVENT_VERSION%-stable.tar.gz
-- 7z x libevent-%LIBEVENT_VERSION%-stable.tar.gz -so | 7z x -si -ttar > nul
-- cd libevent-%LIBEVENT_VERSION%-stable
-- nmake -f Makefile.nmake static_libs
-- mkdir lib
-- move *.lib lib\
-- move WIN32-Code\nmake\event2\* include\event2\
-- move *.h include\
-- cd ..
-  # 
-- cd %APPVEYOR_BUILD_FOLDER%
+  - ECHO "Filesystem root:"
+  - ps: "ls \"C:/\""
+    # recursive clone 
+  - git submodule update --init --recursive --depth 3
+    # VC env
+  - if "%BITS%"=="64" (call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat") else (call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat")
+    # mbedTLS
+  - cd \
+  - if defined MBEDTLS_VERSION appveyor DownloadFile https://github.com/Mbed-TLS/mbedtls/archive/v%MBEDTLS_VERSION%.tar.gz -FileName mbedtls-%MBEDTLS_VERSION%.tar.gz
+  - if defined MBEDTLS_VERSION 7z x mbedtls-%MBEDTLS_VERSION%.tar.gz -so | 7z x -si -ttar > nul
+  - if defined MBEDTLS_VERSION cd mbedtls-%MBEDTLS_VERSION%
+  - if defined MBEDTLS_VERSION mkdir lib
+  - if defined MBEDTLS_VERSION mkdir cmake-build
+  - if defined MBEDTLS_VERSION cd cmake-build
+  - if defined MBEDTLS_VERSION cmake -G "%CMAKE_GENERATOR%" -A %ARCH% ..
+  - if defined MBEDTLS_VERSION cmake --build . --config Release
+  - if defined MBEDTLS_VERSION move library\Release\*.lib ..\lib\
+    # Libevent
+  - cd \
+  - appveyor DownloadFile https://github.com/libevent/libevent/releases/download/release-%LIBEVENT_VERSION%-stable/libevent-%LIBEVENT_VERSION%-stable.tar.gz
+  - 7z x libevent-%LIBEVENT_VERSION%-stable.tar.gz -so | 7z x -si -ttar > nul
+  - cd libevent-%LIBEVENT_VERSION%-stable
+  - nmake -f Makefile.nmake static_libs
+  - mkdir lib
+  - move *.lib lib\
+  - move WIN32-Code\nmake\event2\* include\event2\
+  - move *.h include\
+  - cd ..
+    # 
+  - cd %APPVEYOR_BUILD_FOLDER%
 
 
 build_script:
-- set PATH=C:\ProgramData\chocolatey\bin;C:\apache-ant-1.9.6\bin;%PATH%
-- set JAVA_HOME=C:\Program Files\Java\jdk1.7.0
-- set PATH=%JAVA_HOME%\bin;%PATH%
-# - set PATH=%PATH%;C:\Program Files (x86)\Haskell Platform\2014.2.0.0\bin
-# - set PATH=%PATH%;C:\Program Files (x86)\Haskell Platform\2014.2.0.0\lib\extralibs\bin
-- set PATH=C:\Python27-x64\scripts;C:\Python27-x64;%PATH%
-- mkdir cmake-build
-- cd cmake-build
-- cmake -G "%CMAKE_GENERATOR%" -DENABLE_HTTPS_PROXY:STRING="%ENABLE_HTTPS_PROXY%" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-%LIBEVENT_VERSION%-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-%MBEDTLS_VERSION% -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
-- cmake --build . --config Release
-# TODO: 
-# - cpack
-# - ctest 
+  - mkdir cmake-build
+  - cd cmake-build
+  - cmake -G "%CMAKE_GENERATOR%" -A %ARCH% -DENABLE_HTTPS_PROXY:STRING="%ENABLE_HTTPS_PROXY%" -DENABLE_SS:STRING="%ENABLE_SS%" -DUSE_CRYPTO_OPENSSL:STRING="%USE_CRYPTO_OPENSSL%" -DUSE_CRYPTO_MBEDTLS="%USE_CRYPTO_MBEDTLS%" -DLIBEVENT_ROOT=C:\libevent-%LIBEVENT_VERSION%-stable -DMBEDTLS_ROOT_DIR=C:\mbedtls-%MBEDTLS_VERSION% -DBOOST_ROOT="%BOOST_ROOT%" -DBOOST_LIBRARYDIR="%BOOST_LIBRARYDIR%" ..
+  - cmake --build . --config Release
+  # TODO: 
+  # - cpack
+  # - ctest 
 
 artifacts:
-- path: cmake-build\Release
-  name: mproxy_$(BUILD_SUFFIX)
+  - path: cmake-build\Release
+    name: mproxy_$(BUILD_SUFFIX)
 
 deploy:
   #release: mproxy_v$(appveyor_build_version)
@@ -125,4 +122,3 @@ deploy:
   prerelease: false
   on:
     appveyor_repo_tag: true        # deploy on tag push only
-
