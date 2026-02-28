@@ -53,16 +53,15 @@ environment:
       OPENSSL_ROOT_DIR: C:\OpenSSL-v111-Win32
       BOOST_LIBRARYDIR: C:\Libraries\boost_1_69_0\lib32-msvc-14.1
 
-    # build with clang-cl (LLVM)
+    # MSYS2 build with mbed TLS library
     - ENABLE_SS: ON
-      USE_CRYPTO_OPENSSL: ON
-      USE_CRYPTO_MBEDTLS: OFF
-      CMAKE_GENERATOR: Ninja
-      CC: clang-cl
-      CXX: clang-cl
-      BUILD_SUFFIX: "clang_vc2017_x64"
+      USE_CRYPTO_OPENSSL: OFF
+      USE_CRYPTO_MBEDTLS: ON
+      MBEDTLS_VERSION: 2.28.8
+      CMAKE_GENERATOR: "MSYS Makefiles"
+      MSYSTEM: MINGW64
+      BUILD_SUFFIX: "mbedtls_msys2_x64"
       BITS: 64
-      BOOST_LIBRARYDIR: C:\Libraries\boost_1_69_0\lib64-msvc-14.1
 
     # build https proxy with openssl library
     #- ENABLE_SS: ON
@@ -76,9 +75,10 @@ install:
   # recursive clone 
 - git submodule update --init --recursive --depth 3
   # VC env
-- '"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars%BITS%.bat"'
+- if not defined MSYSTEM '"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars%BITS%.bat"'
+- if defined MSYSTEM set PATH=C:\msys64\%MSYSTEM%\bin;C:\msys64\usr\bin;%PATH%
   # patch libevhtp FindLibEvent.cmake
-- ps: (Get-Content "libevhtp/cmake/FindLibEvent.cmake").Replace("NAMES libevent", "NAMES libevent event").Replace("NAMES libevent_core", "NAMES libevent_core event_core").Replace("NAMES libevent_pthreads", "NAMES libevent_pthreads event_pthreads").Replace("NAMES libevent_extra libevent_extras", "NAMES libevent_extra libevent_extras event_extra").Replace("# nmake no event_openssl", "FIND_LIBRARY(LIBEVENT_OPENSSL_LIBRARY NAMES libevent_openssl event_openssl HINTS `${_LIBEVENT_LIB_DIR_HINTS} )") | Set-Content "libevhtp/cmake/FindLibEvent.cmake"
+- ps: (Get-Content "libevhtp/cmake/FindLibEvent.cmake").Replace("NAMES libevent", "NAMES libevent event").Replace("NAMES libevent_core", "NAMES libevent_core event_core").Replace("NAMES libevent_pthreads", "NAMES libevent_pthreads event_pthreads").Replace("NAMES libevent_extra libevent_extras", "NAMES libevent_extra libevent_extras event_extra").Replace("# nmake no event_openssl", "FIND_LIBRARY(LIBEVENT_OPENSSL_LIBRARY NAMES libevent_openssl event_openssl HINTS `${_LIBEVENT_LIB_DIR_HINTS} )").Replace("set(_LIBEVENT_LIB_DIR_HINTS `${_LIBEVENT_ROOT_HINTS}/.libs )", "set(_LIBEVENT_LIB_DIR_HINTS `${_LIBEVENT_ROOT_HINTS}/.libs `${_LIBEVENT_ROOT_HINTS}/lib )") | Set-Content "libevhtp/cmake/FindLibEvent.cmake"
   # mbedTLS
 - cd \
 - if defined MBEDTLS_VERSION appveyor DownloadFile https://github.com/Mbed-TLS/mbedtls/archive/v%MBEDTLS_VERSION%.tar.gz -FileName mbedtls-%MBEDTLS_VERSION%.tar.gz
