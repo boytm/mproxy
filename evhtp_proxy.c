@@ -92,6 +92,36 @@ static const char* upstream_mode_to_str(enum upstream_mode mode)
     }
 }
 
+static void
+log_access(evhtp_request_t * req, int status)
+{
+    const char * method = (req->conn && req->conn->parser) ? htparser_get_methodstr(req->conn->parser) : "-";
+    const char * host = (req->uri && req->uri->authority) ? req->uri->authority->hostname : NULL;
+    uint16_t port = (req->uri && req->uri->authority) ? req->uri->authority->port : 0;
+    const char * path = (req->uri && req->uri->path) ? req->uri->path->full : NULL;
+    char client_ip[INET6_ADDRSTRLEN] = "-";
+
+    if (req->conn && req->conn->saddr) {
+        if (req->conn->saddr->sa_family == AF_INET) {
+            evutil_inet_ntop(AF_INET, &((struct sockaddr_in *)req->conn->saddr)->sin_addr, client_ip, sizeof(client_ip));
+        } else if (req->conn->saddr->sa_family == AF_INET6) {
+            evutil_inet_ntop(AF_INET6, &((struct sockaddr_in6 *)req->conn->saddr)->sin6_addr, client_ip, sizeof(client_ip));
+        }
+    }
+
+    if (host) {
+        if (port && port != 80 && port != 443) {
+            LOGA("%s %s %s:%u%s %d", client_ip, method, host, port, path ? path : "", status);
+        } else {
+            LOGA("%s %s %s%s %d", client_ip, method, host, path ? path : "", status);
+        }
+    } else if (path) {
+        LOGA("%s %s %s %d", client_ip, method, path, status);
+    } else {
+        LOGA("%s %s - %d", client_ip, method, status);
+    }
+}
+
 void connect_upstream(struct event_base *evbase, struct evdns_base *evdns_base, const char *hostname, int port, connect_callback cb, void *arg)
 {
     switch (g_upstream_mode)
@@ -125,6 +155,7 @@ backend_conn_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
     evhtp_request_t * backend_req = req;
     LOGE("evhtp backend req %p error %hu while transport HTTP header", backend_req, errtype);
 
+    log_access(frontend_req, EVHTP_RES_BADGATEWAY);
     evhtp_send_reply(frontend_req, EVHTP_RES_BADGATEWAY); // return 502 bad gateway, when connect fail
     evhtp_request_resume(frontend_req);
 
@@ -296,6 +327,7 @@ backend_cb(evhtp_request_t * backend_req, void * arg) {
     evhtp_request_t * frontend_req = (evhtp_request_t *)arg;
 
     LOGD("backend req %p (connection %p) finish http response.", backend_req, backend_req->conn);
+    log_access(frontend_req, evhtp_request_status(backend_req));
     evhtp_send_reply_chunk_end(frontend_req);
 
     evhtp_unset_hook(&frontend_req->hooks, evhtp_hook_on_error);
@@ -336,6 +368,7 @@ frontend_cb(evhtp_request_t * req, void * arg) {
     }
     if (strlen(host) > 255) {
         LOGE("domain %s too long", host);
+        log_access(req, EVHTP_RES_SERVERR);
         return evhtp_send_reply(req, EVHTP_RES_SERVERR);
     }
 
@@ -344,6 +377,7 @@ frontend_cb(evhtp_request_t * req, void * arg) {
         if (auth == NULL || strncasecmp(auth, "Basic ", 6) != 0 || strcmp(auth + 6, g_proxy_auth + 6) != 0) {
             evhtp_headers_add_header(req->headers_out,
                 evhtp_header_new("Proxy-Authenticate", "Basic realm=\"Proxy\"", 0, 0));
+            log_access(req, EVHTP_RES_PROXYAUTHREQ);
             evhtp_send_reply(req, EVHTP_RES_PROXYAUTHREQ);
             return;
         }
@@ -364,12 +398,14 @@ void connect_cb(struct bufferevent *bev, void *arg)
     evhtp_request_t * req = (evhtp_request_t *)arg;
 
     if (NULL == bev) {
+        log_access(req, EVHTP_RES_BADGATEWAY);
         evhtp_send_reply(req, EVHTP_RES_BADGATEWAY); // return 502 bad gateway, when connect fail
         evhtp_request_resume(req);
         return;
     }
 
     LOGD("ready to relay http socket for frontend req %p", req);
+    log_access(req, EVHTP_RES_OK);
     evbev_t * b_in = evhtp_request_take_ownership(req);
     evhtp_connection_free(evhtp_request_get_connection(req));
 
@@ -388,6 +424,7 @@ void lru_get_cb(evhtp_connection_t *conn, void *arg)
     LOGD("lru get backend connection %p for frontend req %p", conn, req);
 
     if (NULL == conn) {
+        log_access(req, EVHTP_RES_BADGATEWAY);
         evhtp_send_reply(req, EVHTP_RES_BADGATEWAY); // return 502 bad gateway, when connect fail
         evhtp_request_resume(req);
         return;
@@ -450,8 +487,10 @@ static void response_proxy_pac_file(evhtp_request_t * frontend_req)
         evhtp_headers_add_header(frontend_req->headers_out,
                 evhtp_header_new("Content-Type", "application/x-ns-proxy-autoconfig", 0, 0));
         evbuffer_add_reference(frontend_req->buffer_out, g_proxy_pac_content, g_proxy_pac_length, NULL, NULL);
+        log_access(frontend_req, EVHTP_RES_OK);
         evhtp_send_reply(frontend_req, EVHTP_RES_OK);
     } else {
+        log_access(frontend_req, EVHTP_RES_SERVERR);
         evhtp_send_reply(frontend_req, EVHTP_RES_SERVERR); /* internal server error */
     }
 }
