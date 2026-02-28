@@ -77,6 +77,8 @@ install:
 - git submodule update --init --recursive --depth 3
   # VC env
 - '"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars%BITS%.bat"'
+  # patch libevhtp FindLibEvent.cmake
+- ps: (Get-Content "libevhtp/cmake/FindLibEvent.cmake").Replace("NAMES libevent", "NAMES libevent event").Replace("NAMES libevent_core", "NAMES libevent_core event_core").Replace("NAMES libevent_pthreads", "NAMES libevent_pthreads event_pthreads").Replace("NAMES libevent_extra libevent_extras", "NAMES libevent_extra libevent_extras event_extra").Replace("# nmake no event_openssl", "FIND_LIBRARY(LIBEVENT_OPENSSL_LIBRARY NAMES libevent_openssl event_openssl HINTS `${_LIBEVENT_LIB_DIR_HINTS} )") | Set-Content "libevhtp/cmake/FindLibEvent.cmake"
   # mbedTLS
 - cd \
 - if defined MBEDTLS_VERSION appveyor DownloadFile https://github.com/Mbed-TLS/mbedtls/archive/v%MBEDTLS_VERSION%.tar.gz -FileName mbedtls-%MBEDTLS_VERSION%.tar.gz
