@@ -119,7 +119,7 @@ build_script:
 # - ctest 
 
 artifacts:
-- path: cmake-build\Release
+- path: cmake-build\**\mproxy.exe
   name: mproxy_$(BUILD_SUFFIX)
 
 deploy:
