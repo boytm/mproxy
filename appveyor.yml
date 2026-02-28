@@ -87,7 +87,7 @@ install:
 - if defined MBEDTLS_VERSION mkdir lib
 - if defined MBEDTLS_VERSION mkdir cmake-build
 - if defined MBEDTLS_VERSION cd cmake-build
-- if defined MBEDTLS_VERSION cmake -G "%CMAKE_GENERATOR%" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=..\install ..
+- if defined MBEDTLS_VERSION cmake -G "%CMAKE_GENERATOR%" -DCMAKE_BUILD_TYPE=Release -DUSE_SHARED_MBEDTLS_LIBRARY=OFF -DCMAKE_INSTALL_PREFIX=..\install ..
 - if defined MBEDTLS_VERSION cmake --build . --config Release --target install
   # Libevent
 - cd \
@@ -96,7 +96,7 @@ install:
 - cd libevent-%LIBEVENT_VERSION%-stable
 - mkdir cmake-build
 - cd cmake-build
-- cmake -G "%CMAKE_GENERATOR%" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=C:\libevent-install -DEVENT__DISABLE_TESTS=ON -DEVENT__DISABLE_SAMPLES=ON -DOPENSSL_ROOT_DIR="%OPENSSL_ROOT_DIR%" ..
+- cmake -G "%CMAKE_GENERATOR%" -DCMAKE_BUILD_TYPE=Release -DEVENT__LIBRARY_TYPE=STATIC -DCMAKE_INSTALL_PREFIX=C:\libevent-install -DEVENT__DISABLE_TESTS=ON -DEVENT__DISABLE_SAMPLES=ON -DOPENSSL_ROOT_DIR="%OPENSSL_ROOT_DIR%" ..
 - cmake --build . --config Release --target install
 - cd ..
   # 
