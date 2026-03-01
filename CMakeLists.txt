@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.8.11)
+cmake_minimum_required (VERSION 3.10)
 project(mproxy)
 
 set(MPROXY_MAJOR_VERSION 0)
@@ -23,6 +23,11 @@ OPTION(USE_CRYPTO_MBEDTLS "Use mbed TLS crypt library" OFF)
 # -DENABLE_HTTPS_PROXY:STRING=ON
 OPTION(ENABLE_HTTPS_PROXY "Enable https proxy" OFF)
 
+if (NOT ENABLE_SS)
+    set(USE_CRYPTO_OPENSSL OFF)
+    set(USE_CRYPTO_MBEDTLS OFF)
+endif()
+
 # add source files to DIR_SRCS
 aux_source_directory(. DIR_SRCS)
 
@@ -38,8 +43,7 @@ add_subdirectory(libevhtp)
 include_directories(SYSTEM ${LIBEVENT_INCLUDE_DIR})
 set(MPROXY_LIBS ${MPROXY_LIBS} ${LIBEVENT_LIBRARY})
 if (WIN32)
-    find_library(LIB_WS32 ws2_32)
-    set(MPROXY_LIBS ${MPROXY_LIBS} ${LIB_WS32})
+    set(MPROXY_LIBS ${MPROXY_LIBS} ws2_32)
 elseif (NOT APPLE)
     find_library(LIB_RT rt)
     set(MPROXY_LIBS ${MPROXY_LIBS} ${LIB_RT})
@@ -96,9 +100,6 @@ if (ENABLE_SS)
         message(WARNING "OpenSSL or mbed TLS is required to enable shadowsocks protocol ") 
         set(ENABLE_SS OFF)
     endif()
-else()
-	set(USE_CRYPTO_OPENSSL OFF)
-    set(USE_CRYPTO_MBEDTLS OFF)
 endif()
 
 add_executable(mproxy ${MPROXY_SOURCES} )

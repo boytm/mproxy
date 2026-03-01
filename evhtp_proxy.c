@@ -458,7 +458,7 @@ static void response_proxy_pac_file(evhtp_request_t * frontend_req)
 
 /* Terminate gracefully on SIGTERM */
 void
-sigterm_cb(int fd, short event, void * arg) {
+sigterm_cb(evutil_socket_t fd, short event, void * arg) {
     evbase_t     * evbase = (evbase_t *)arg;
     struct timeval tv     = { .tv_usec = 100000, .tv_sec = 0 }; /* 100 ms */
 

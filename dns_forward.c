@@ -258,7 +258,7 @@ static void dns_upstream_connect_cb(struct bufferevent *bev, void *arg)
     bufferevent_enable(bev, EV_READ);
 }
 
-static void dns_read_request(int srvfd, short what, void *arg)
+static void dns_read_request(evutil_socket_t srvfd, short what, void *arg)
 {
     dnsu2t_instance *self = arg;
     struct sockaddr_storage ss;
