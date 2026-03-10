@@ -164,6 +164,10 @@ enum{
     AES_192_OCB,
     AES_256_OCB,
     CHACHA20_IETF_POLY1305,
+    AES_128_GCM_2022,
+    AES_192_GCM_2022,
+    AES_256_GCM_2022,
+    CHACHA20_POLY1305_2022,
     CIPHER_NUM,      /* must be last */
 };
 
