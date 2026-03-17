@@ -37,6 +37,9 @@
 #define LOGI(...) LOG(ANDROID_LOG_INFO, __VA_ARGS__)
 #define LOGW(...) LOG(ANDROID_LOG_WARN, __VA_ARGS__)
 #define LOGE(...) LOG(ANDROID_LOG_ERROR, __VA_ARGS__)
+#define LOGA(fmt, ...)                                                \
+        ((void)__android_log_print(ANDROID_LOG_INFO, TAG, \
+                                           "[ACCESS] " fmt, ## __VA_ARGS__))
 
 #else
 typedef enum LogPriority {
@@ -81,6 +84,15 @@ static inline const char* PRIORITY_TO_STRING(LogPriority prio)
             fflush(log_file);                                                                            \
             }                                                                                                     \
 } while (0)
+
+#define LOGA(fmt, ...) do {                                                               \
+            time_t      t  = time(NULL);                                                               \
+            struct tm dm; localtime_s(&dm, &t);                                                        \
+                                                                                                       \
+            fprintf(log_file, "[%02d:%02d:%02d] ACCESS: " \
+                                    fmt "\n", dm.tm_hour, dm.tm_min, dm.tm_sec, ## __VA_ARGS__);          \
+            fflush(log_file);                                                                            \
+} while (0)
 #else
 #define LOG(prio, fmt, ...) do {                                                               \
     if (prio >= log_prio_base) {                                                                   \
@@ -91,6 +103,15 @@ static inline const char* PRIORITY_TO_STRING(LogPriority prio)
                                     fmt "\n", dm.tm_hour, dm.tm_min, dm.tm_sec, PRIORITY_TO_STRING(prio), __FILENAME__, ## __VA_ARGS__);          \
             fflush(log_file);                                                                            \
     }                                                                                                  \
+} while (0)
+
+#define LOGA(fmt, ...) do {                                                               \
+            time_t      t  = time(NULL);                                                               \
+            struct tm dm; localtime_r(&t, &dm);                                                            \
+                                                                                                       \
+            fprintf(log_file, "[%02d:%02d:%02d] ACCESS: " \
+                                    fmt "\n", dm.tm_hour, dm.tm_min, dm.tm_sec, ## __VA_ARGS__);          \
+            fflush(log_file);                                                                            \
 } while (0)
 #endif
 
